@@ -31,7 +31,7 @@
    Author: Michaja van der Zouwen
    Date  : 17-02-2016
 .LINK
-   https://itmicah.wordpress.com
+   https://itmicah.wordpress.com/2016/02/18/change-network-connection-category-using-powershell/
 .LINK
    Set-NetConnectionProfile
 #>
@@ -116,7 +116,7 @@ function Get-NetConnectionProfile
    Author: Michaja van der Zouwen
    Date  : 17-02-2016
 .LINK
-   https://itmicah.wordpress.com
+   https://itmicah.wordpress.com/2016/02/18/change-network-connection-category-using-powershell/
 .LINK
    Get-NetConnectionProfile
 #>
