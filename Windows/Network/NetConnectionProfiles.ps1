@@ -52,7 +52,7 @@ function Get-NetConnectionProfile
         [string]
         $Name,
 
-        # Network Category type
+        # Current Network Category type
         [Parameter(Mandatory=$false, 
                    Position=1)]
         [ValidateSet('Public','Private','Domain')]
@@ -130,7 +130,7 @@ function Set-NetConnectionProfile
     [OutputType([String])]
     Param
     (
-        # Param1 help description
+        # Name of the network connection
         [Parameter(Mandatory=$false, 
                    ValueFromPipeline=$true,
                    ValueFromPipelineByPropertyName=$true, 
@@ -141,6 +141,7 @@ function Set-NetConnectionProfile
         [string]
         $Name,
 
+        # New Network Category type
         [Parameter(Mandatory=$true, 
                    Position=1)]
         [ValidateSet('Public','Private','Domain')]
