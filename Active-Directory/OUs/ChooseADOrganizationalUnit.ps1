@@ -28,7 +28,7 @@
    version: 2.0
    Date   : 29-03-2016
 .LINK
-   https://itmicah.wordpress.com/2014/11/27/copy-ad-group-memberships-from-a-source-user-to-other-users
+   https://itmicah.wordpress.com/
 #>
 function Choose-ADOrganizationalUnit
 {
