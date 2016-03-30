@@ -28,7 +28,7 @@
    version: 2.0
    Date   : 29-03-2016
 .LINK
-   https://itmicah.wordpress.com/
+   https://itmicah.wordpress.com/2016/03/29/active-directory-ou-picker-revisited/
 #>
 function Choose-ADOrganizationalUnit
 {
