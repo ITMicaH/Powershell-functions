@@ -16,6 +16,12 @@
 .EXAMPLE
    Start-ExamFromPDF -PDFPath C:\PDF\SomeExam.pdf -DllPath C:\itextsharp.dll -Exclude SomeExam,'Exclude this line'
    Start a simulation of the SomeExam.pdf exam. The word SomeExam and the line 'Exclude this line' are excluded from the content. Passing score is default (800).
+.NOTES
+   Author  : Michaja van der Zouwen
+   Version : 0.1
+   Date    : 19-05-2016
+.LINK
+   https://itmicah.wordpress.com
 #>
 Function Start-ExamFromPDF
 {
