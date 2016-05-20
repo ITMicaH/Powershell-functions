@@ -1,6 +1,6 @@
 # ExamFromPDF.ps1
 
-## Function Start-ExamFromPDF
+#### Function Start-ExamFromPDF
 
 Extracts text from a test exam PDF file, parses the content and simulates the exam.
 Requires the [itextsharp.dll](http://github.com/itext/itextpdf/releases/latest).
