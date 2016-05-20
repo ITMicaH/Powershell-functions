@@ -13,6 +13,8 @@
    Words/Lines to exclude from PDF content.
 .PARAMETER PassingScore
    Score necessary for passing the test.
+.PARAMETER DirectShow
+   Shows result directly after answering each question.
 .EXAMPLE
    Start-ExamFromPDF -PDFPath C:\PDF\SomeExam.pdf -DllPath C:\itextsharp.dll -Exclude SomeExam,'Exclude this line'
    Start a simulation of the SomeExam.pdf exam. The word SomeExam and the line 'Exclude this line' are excluded from the content. Passing score is default (800).
@@ -44,157 +46,110 @@ Function Start-ExamFromPDF
         $Exclude,
 
         [int]
-        $PassingScore = 800
+        $PassingScore = 800,
+
+        [switch]
+        $DirectShow
     )
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        #region functions
+    #region functions
 
-function Get-PDFContent
-{
-    [CmdletBinding()]
-    Param
-    (
-        # Param1 help description
-        [Parameter(Mandatory=$true,
-                   ValueFromPipelineByPropertyName=$true,
-                   Position=0)]
-        $Path,
-
-        $DllPath
-    )
-
-    Begin
+    function Get-PDFContent
     {
-        Add-Type -Path $DllPath -ea 0
-    }
-    Process
-    {
-        $Reader = New-Object iTextSharp.text.pdf.pdfreader -ArgumentList $Path
-        for ($page = 1; $page -le $Reader.NumberOfPages; $page++) {
-            [iTextSharp.text.pdf.parser.PdfTextExtractor]::GetTextFromPage($reader, $page) -split "\r?\n"
+        [CmdletBinding()]
+        Param
+        (
+            # Param1 help description
+            [Parameter(Mandatory=$true,
+                       ValueFromPipelineByPropertyName=$true,
+                       Position=0)]
+            $Path,
+
+            $DllPath
+        )
+
+        Begin
+        {
+            Add-Type -Path $DllPath -ea 0
+        }
+        Process
+        {
+            $Reader = New-Object iTextSharp.text.pdf.pdfreader -ArgumentList $Path
+            for ($page = 1; $page -le $Reader.NumberOfPages; $page++) {
+                [iTextSharp.text.pdf.parser.PdfTextExtractor]::GetTextFromPage($reader, $page) -split "\r?\n"
+            }
+        }
+        End
+        {
+        
         }
     }
-    End
+
+    Function Parse-ExamContent
     {
-        
-    }
-}
-
-Function Parse-ExamContent
-{
-    Param(
-        [string[]]$Content,
-        [string]$QuestionText,
-        [string]$CorrectText
-    )
-    $Exam = @()
-    switch -regex ($Content) {
-        "^$QuestionText\s+\d+" {
-                            $_ -match '(\d+)$' | Out-Null
-                            $Number = [int]$Matches[1]
-                            $Exam += [pscustomobject]@{
-                                Number = $Number
-                                Question = ''
-                                Answers = [pscustomobject]@{}
-                                Section = ''
-                                Correct = ''
-                                Explanation = ''
-                                Answered = ''
+        Param(
+            [string[]]$Content,
+            [string]$QuestionText,
+            [string]$CorrectText
+        )
+        $Exam = @()
+        switch -regex ($Content) {
+            "^$QuestionText\s+\d+" {
+                                $_ -match '(\d+)$' | Out-Null
+                                $Number = [int]$Matches[1]
+                                $Exam += [pscustomobject]@{
+                                    Number = $Number
+                                    Question = ''
+                                    Answers = [pscustomobject]@{}
+                                    Section = ''
+                                    Correct = ''
+                                    Explanation = ''
+                                    Answered = ''
+                                }
                             }
-                        }
-        "^\w\.\s+.+"    {
-                            $Choice = $_.Trim().ToCharArray()[0]
-                            $Answer = $_.Trim() -replace '\w\.\s+',''
-                            $Exam[-1].Answers | Add-Member noteproperty $Choice $Answer
-                        }
-        "$CorrectText"  {
-                            $Exam[-1].Correct = $_.Trim().ToCharArray()[-1]
-                        }
-        'Section\:.+'  {
-                            $Exam[-1].Section = $_.Substring(9)
-                        }
-        default         {
-                            If ($Exam[-1])
-                            {
-                                If (!$Exam[-1].Answers.A)
+            "^\w\.\s+.+"    {
+                                $Choice = $_.Trim().ToCharArray()[0]
+                                $Answer = $_.Trim() -replace '\w\.\s+',''
+                                $Exam[-1].Answers | Add-Member noteproperty $Choice $Answer
+                            }
+            "$CorrectText"  {
+                                $Exam[-1].Correct = $_.Trim().ToCharArray()[-1]
+                            }
+            'Section\:.+'  {
+                                $Exam[-1].Section = $_.Substring(9)
+                            }
+            default         {
+                                If ($Exam[-1])
                                 {
-                                    If ($Exam[-1].Question)
+                                    If (!$Exam[-1].Answers.A)
                                     {
-                                        $Exam[-1].Question = $Exam[-1].Question + ' ' + $_.Trim()
+                                        If ($Exam[-1].Question)
+                                        {
+                                            $Exam[-1].Question = $Exam[-1].Question + ' ' + $_.Trim()
+                                        }
+                                        else
+                                        {
+                                            $Exam[-1].Question = $_.Trim()
+                                        }
                                     }
                                     else
                                     {
-                                        $Exam[-1].Question = $_.Trim()
-                                    }
-                                }
-                                else
-                                {
-                                    If ($Exam[-1].Explanation)
-                                    {
-                                        $Exam[-1].Explanation = $Exam[-1].Explanation + ' ' + $_.Trim()
-                                    }
-                                    else
-                                    {
-                                        $Exam[-1].Explanation = $_.Trim()
+                                        If ($Exam[-1].Explanation)
+                                        {
+                                            $Exam[-1].Explanation = $Exam[-1].Explanation + ' ' + $_.Trim()
+                                        }
+                                        else
+                                        {
+                                            $Exam[-1].Explanation = $_.Trim()
+                                        }
                                     }
                                 }
                             }
-                        }
+        }
+        $Exam
     }
-    $Exam
-}
 
-Function Pause-Script
-{
-    Param($Message = "Press any key to continue...")
-    If ($psISE) {
-        # The "ReadKey" functionality is not supported in Windows PowerShell ISE.
- 
-        $Shell = New-Object -ComObject "WScript.Shell"
-        $Button = $Shell.Popup("Click OK to continue.", 0, "Script Paused", 0)
- 
-        Return
-    }
- 
-    Write-Host -NoNewline $Message
- 
-    $Ignore =
-        16,  # Shift (left or right)
-        17,  # Ctrl (left or right)
-        18,  # Alt (left or right)
-        20,  # Caps lock
-        91,  # Windows key (left)
-        92,  # Windows key (right)
-        93,  # Menu key
-        144, # Num lock
-        145, # Scroll lock
-        166, # Back
-        167, # Forward
-        168, # Refresh
-        169, # Stop
-        170, # Search
-        171, # Favorites
-        172, # Start/Home
-        173, # Mute
-        174, # Volume Down
-        175, # Volume Up
-        176, # Next Track
-        177, # Previous Track
-        178, # Stop Media
-        179, # Play
-        180, # Mail
-        181, # Select Media
-        182, # Application 1
-        183  # Application 2
- 
-    While ($KeyInfo.VirtualKeyCode -Eq $Null -Or $Ignore -Contains $KeyInfo.VirtualKeyCode) {
-        $KeyInfo = $Host.UI.RawUI.ReadKey("NoEcho, IncludeKeyDown")
-    }
- 
-    Write-Host
-}
-
-#endregion functions
+    #endregion functions
 
     #region Main
 
@@ -216,6 +171,17 @@ Function Pause-Script
         }
         Until ($Answer -in $Options.Name)
         $Question.Answered = $Answer.ToUpper()
+        If ($DirectShow)
+        {
+            ''
+            Switch ($Question.Correct)
+            {
+                $Answer {Write-Host 'Your answer is correct!' -ForegroundColor Green}
+                Default {Write-Host "Incorrect!`nCorrect answer: $($Question.Correct)" -ForegroundColor Red}
+            }
+            ''
+            $null = Read-Host -Prompt 'Press <Enter> to continue'
+        }
         cls
     }
 
