@@ -40,7 +40,11 @@ Function Start-ExamFromPDF
         [ValidateScript({Test-Path $_})]
         [string]
         $DllPath = 'C:\temp\itextsharp-all-5.5.9\itextsharp.dll',
-
+        
+        # Which exam you want to take
+        [ValidateSet('A','B','C','D')]
+        [string]
+        $Exam,
         # Words/Lines to exclude from PDF content
         [string[]]
         $Exclude,
@@ -51,42 +55,44 @@ Function Start-ExamFromPDF
         [switch]
         $DirectShow
     )
-
-    #region functions
-
-    function Get-PDFContent
+    Begin
     {
-        [CmdletBinding()]
-        Param
-        (
-            # Param1 help description
-            [Parameter(Mandatory=$true,
-                       ValueFromPipelineByPropertyName=$true,
-                       Position=0)]
-            $Path,
 
-            $DllPath
-        )
+        #region functions
 
-        Begin
+        function Get-PDFContent
         {
-            Add-Type -Path $DllPath -ea 0
-        }
-        Process
-        {
-            $Reader = New-Object iTextSharp.text.pdf.pdfreader -ArgumentList $Path
-            for ($page = 1; $page -le $Reader.NumberOfPages; $page++) {
-                [iTextSharp.text.pdf.parser.PdfTextExtractor]::GetTextFromPage($reader, $page) -split "\r?\n"
+            [CmdletBinding()]
+            Param
+            (
+                # Param1 help description
+                [Parameter(Mandatory=$true,
+                           ValueFromPipelineByPropertyName=$true,
+                           Position=0)]
+                $Path,
+
+                $DllPath
+            )
+
+            Begin
+            {
+                Add-Type -Path $DllPath -ea 0
+            }
+            Process
+            {
+                $Reader = New-Object iTextSharp.text.pdf.pdfreader -ArgumentList $Path
+                for ($page = 1; $page -le $Reader.NumberOfPages; $page++) {
+                    [iTextSharp.text.pdf.parser.PdfTextExtractor]::GetTextFromPage($reader, $page) -split "\r?\n"
+                }
+            }
+            End
+            {
+                $Reader.Close()
             }
         }
-        End
-        {
-        
-        }
-    }
 
-    Function Parse-ExamContent
-    {
+        Function Parse-ExamContent
+        {
         Param(
             [string[]]$Content,
             [string]$QuestionText,
@@ -94,10 +100,13 @@ Function Start-ExamFromPDF
         )
         $Exam = @()
         switch -regex ($Content) {
-            "^$QuestionText\s+\d+" {
-                                $_ -match '(\d+)$' | Out-Null
+            'Exam\s(A|B|C|D)'   {
+                                    $ExamNr = $Matches[1]
+                                }
+            "^$QuestionText\s+(\d+)" {
                                 $Number = [int]$Matches[1]
                                 $Exam += [pscustomobject]@{
+                                    Exam = $ExamNr
                                     Number = $Number
                                     Question = ''
                                     Answers = [pscustomobject]@{}
@@ -108,12 +117,18 @@ Function Start-ExamFromPDF
                                 }
                             }
             "^\w\.\s+.+"    {
-                                $Choice = $_.Trim().ToCharArray()[0]
-                                $Answer = $_.Trim() -replace '\w\.\s+',''
-                                $Exam[-1].Answers | Add-Member noteproperty $Choice $Answer
+                                If ($Exam[-1])
+                                {
+                                    $Choice = $_.Trim().ToCharArray()[0]
+                                    $Answer = $_.Trim() -replace '\w\.\s+',''
+                                    $Exam[-1].Answers | Add-Member noteproperty $Choice $Answer
+                                }
                             }
             "$CorrectText"  {
-                                $Exam[-1].Correct = $_.Trim().ToCharArray()[-1]
+                                If ($Exam[-1])
+                                {
+                                    $Exam[-1].Correct = $_.Trim().ToCharArray()[-1]
+                                }
                             }
             'Section\:.+'  {
                                 $Exam[-1].Section = $_.Substring(9)
@@ -147,87 +162,105 @@ Function Start-ExamFromPDF
                             }
         }
         $Exam
-    }
-
-    #endregion functions
-
-    #region Main
-
-    $Content = Get-PDFContent -Path $PDFPath -DllPath $DllPath | ?{$_ -notlike 'http*' -and $_ -notin $Exclude}
-
-    $Exam = Parse-ExamContent -Content $Content -QuestionText QUESTION -CorrectText 'Correct Answer:'
-    cls
-    Write-Host "Starting Exam...`n$('-' * $Host.UI.RawUI.BufferSize.Width)`n"
-
-    foreach ($Question in $Exam)
-    { 
-        Write-Host "Question $($Question.Number)`n"
-        $Question.Question
-        $Question.Answers | Format-List
-        $Options = $Question.Answers | gm -MemberType Noteproperty | select name
-        Do
-        {
-            $Answer = Read-Host -Prompt "Your answer"
         }
-        Until ($Answer -in $Options.Name)
-        $Question.Answered = $Answer.ToUpper()
-        If ($DirectShow)
+
+        #endregion functions
+    }
+    Process
+    {
+        #region Main
+
+        $Content = Get-PDFContent -Path $PDFPath -DllPath $DllPath | ?{$_ -notlike 'http*' -and $_ -notin $Exclude}
+
+        $TestExam = Parse-ExamContent -Content $Content -QuestionText QUESTION -CorrectText 'Correct Answer:'
+        If ($Exam)
         {
-            ''
-            Switch ($Question.Correct)
+            $TestExam = $TestExam | ?{$_.Exam -eq $Exam}
+        }
+        cls
+        Write-Host "Starting Exam...`n$('-' * $Host.UI.RawUI.BufferSize.Width)`n"
+
+        foreach ($Question in $TestExam)
+        { 
+            Write-Host "Question $($Question.Number)`n"
+            $Question.Question
+            $Question.Answers | Format-List
+            $Options = $Question.Answers | gm -MemberType Noteproperty | select name
+            Do
             {
-                $Answer {Write-Host 'Your answer is correct!' -ForegroundColor Green}
-                Default {Write-Host "Incorrect!`nCorrect answer: $($Question.Correct)" -ForegroundColor Red}
+                $Answer = Read-Host -Prompt "Your answer"
+                $Result = $true
+                $Answer.ToCharArray() | %{
+                    IF ($_ -notin $Options.Name)
+                    {
+                        $Result = $false
+                    }
+                }
             }
-            ''
-            $null = Read-Host -Prompt 'Press <Enter> to continue'
+            Until ($Result)
+            $Question.Answered = $Answer.ToUpper()
+            If ($DirectShow)
+            {
+                ''
+                Switch ($Question.Correct)
+                {
+                    $Answer {Write-Host 'Your answer is correct!' -ForegroundColor Green}
+                    Default {Write-Host "Incorrect!`nCorrect answer: $($Question.Correct)" -ForegroundColor Red}
+                }
+                ''
+                $null = Read-Host -Prompt 'Press <Enter> to continue'
+            }
+            cls
         }
-        cls
-    }
 
-    $Correct = $Exam | ?{$_.Answered -eq $_.Correct}
-    [int]$Score = (100 / $Exam.Count) * $Correct.Count * 10
-    $Result = [PSCustomObject]@{
-        'Your Score' = $Score
-        'Passing Score' = $PassingScore
-        'Passed' = $Score -ge $PassingScore
+        $Correct = $TestExam | ?{$_.Answered -eq $_.Correct}
+        [int]$Score = (100 / $TestExam.Count) * $Correct.Count * 10
+        $Result = [PSCustomObject]@{
+            'Your Score' = $Score
+            'Passing Score' = $PassingScore
+            'Passed' = $Score -ge $PassingScore
+        }
+        $Result
+        switch ($Result.Passed)
+        {
+            $true {Write-Host "You passed the test with a score of $Score!" -ForegroundColor Green}
+            $false {Write-Host "You failed the test with a score of $Score!" -ForegroundColor Red}
+        }
+        $title = "Review"
+        $message = "Would you like to review your incorrect answers?"
+
+        $yes = New-Object System.Management.Automation.Host.ChoiceDescription "&Yes", `
+            "Yes I do."
+
+        $no = New-Object System.Management.Automation.Host.ChoiceDescription "&No", `
+            "No I don't."
+
+        $options = [System.Management.Automation.Host.ChoiceDescription[]]($yes, $no)
+
+        $result = $host.ui.PromptForChoice($title, $message, $options, 0) 
+        switch ($result)
+        {
+            0 {"You selected Yes."}
+            1 {return}
+        }
+        $WrongAnswers = $TestExam | ?{$_.Answered -ne $_.Correct}
+        foreach ($WrongAnswer in $WrongAnswers)
+        {
+            cls
+            Write-Host "Question $($WrongAnswer.Number)`n"
+            $WrongAnswer.Question
+            $WrongAnswer.Answers | Format-List
+            Write-Host "Your Answer: $($WrongAnswer.Answered)" -ForegroundColor Red
+            Write-Host "Correct Answer: $($WrongAnswer.Correct)" -ForegroundColor Green
+            Write-Host "`nExplanation: $($WrongAnswer.Explanation)`n`n"
+            $null = Read-Host 'Press <Enter> to continue'
+            Write-Host "`n$('-' * $Host.UI.RawUI.BufferSize.Width)`n"
+        }
+
+        #endregion Main
     }
-    $Result
-    switch ($Result.Passed)
+    End
     {
-        $true {Write-Host "You passed the test with a score of $Score!" -ForegroundColor Green}
-        $false {Write-Host "You failed the test with a score of $Score!" -ForegroundColor Red}
+        
     }
-    $title = "Review"
-    $message = "Would you like to review your incorrect answers?"
-
-    $yes = New-Object System.Management.Automation.Host.ChoiceDescription "&Yes", `
-        "Yes I do."
-
-    $no = New-Object System.Management.Automation.Host.ChoiceDescription "&No", `
-        "No I don't."
-
-    $options = [System.Management.Automation.Host.ChoiceDescription[]]($yes, $no)
-
-    $result = $host.ui.PromptForChoice($title, $message, $options, 0) 
-    switch ($result)
-    {
-        0 {"You selected Yes."}
-        1 {return}
-    }
-    $WrongAnswers = $Exam | ?{$_.Answered -ne $_.Correct}
-    foreach ($WrongAnswer in $WrongAnswers)
-    {
-        cls
-        Write-Host "Question $($WrongAnswer.Number)`n"
-        $WrongAnswer.Question
-        $WrongAnswer.Answers | Format-List
-        Write-Host "Your Answer: $($WrongAnswer.Answered)" -ForegroundColor Red
-        Write-Host "Correct Answer: $($WrongAnswer.Correct)" -ForegroundColor Green
-        Write-Host "`nExplanation: $($WrongAnswer.Explanation)`n`n"
-        $null = Read-Host 'Press <Enter> to continue'
-        Write-Host "`n$('-' * $Host.UI.RawUI.BufferSize.Width)`n"
-    }
-
-    #endregion Main
 }
