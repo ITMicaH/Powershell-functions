@@ -23,12 +23,17 @@
    This command will show the form containing the OU structure of the childdomain 
    of contoso.com. Also the distinguished name can be used (DC=CHILDDOMAIN,DC=CONTOSO,DC=COM).
    Advanced features are shown at startup.
+.EXAMPLE
+   Choose-ADOrganizationalUnit -Domain contoso.com -Credential CONTOSO\AdminUser
+   This command will show the form containing the OU structure of the
+   CONTOSO.COM domain using alternate credentials. This can also be used from a
+   computer that is not domain-joined.
 .OUTPUTS
    PowerShell object with Name and Distinguished Name of chosen organizational unit.
 .NOTES
    Author : Michaja van der Zouwen
-   version: 2.0
-   Date   : 29-03-2016
+   version: 2.1
+   Date   : 15-6-2016
 .LINK
    https://itmicah.wordpress.com/2016/03/29/active-directory-ou-picker-revisited/
 #>
@@ -41,19 +46,19 @@ function Choose-ADOrganizationalUnit
         [Parameter(ValueFromPipelineByPropertyName=$true,
                    Position=0)]
         [Alias("DistinguishedName")]
-	[string]
+	    [string]
         $Domain,
 	
-	#Credentials for connecting to ActiveDirectory domain
-	[Parameter(Mandatory=$false,
-                   Position=1)]
-	$Credential,
+	    #Credentials for connecting to ActiveDirectory domain
+	    [Parameter(Mandatory=$false,
+                       Position=1)]
+	    $Credential,
 
         #Enable Advanced features on startup
         [switch]
         $AdvancedFeatures,
 	
-	#Hide the ability to create OU's
+	    #Hide the ability to create OU's
         [switch]
         $HideNewOUFeature,
 
@@ -150,8 +155,19 @@ function Choose-ADOrganizationalUnit
 		}
 		else
 		{
-	    	$ADsearcher.SearchRoot = "LDAP://$($RootNode.Name)"
-			$ADsearcher.filter = "(|(objectClass=organizationalUnit)(ObjectClass=container)(ObjectClass=builtinDomain))"
+            If ($DomainIP)
+            {
+                $ADsearcher.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$DomainIP/$($RootNode.Name)",$Credential.UserName,$Credential.GetNetworkCredential().password)
+            }
+            elseif ($Credential)
+            {
+                $ADsearcher.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$($RootNode.Name)",$Credential.UserName,$Credential.GetNetworkCredential().password)
+            }
+            else
+            {
+	    	    $ADsearcher.SearchRoot = "LDAP://$($RootNode.Name)"
+			}
+            $ADsearcher.filter = "(|(objectClass=organizationalUnit)(ObjectClass=container)(ObjectClass=builtinDomain))"
 			$ADsearcher.SearchScope = 'OneLevel'
 			
 			IF ($cb_AdvancedFeatures.Checked)
@@ -169,8 +185,15 @@ function Choose-ADOrganizationalUnit
 		        $RootNode.Nodes.Clear()
 				$ADObjects | % {
 					$Type = $_.properties.objectclass | ?{$_ -ne 'top'}
-					$ADsearcher.SearchRoot = $_.Path
-					If ($ADsearcher.FindOne())
+                    If ($Credential)
+                    {
+                        $ADsearcher.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry($_.Path,$Credential.UserName,$Credential.GetNetworkCredential().password)
+                    }
+                    else
+                    {
+					    $ADsearcher.SearchRoot = $_.Path
+					}
+                    If ($ADsearcher.FindOne())
 					{
 						Add-Node $RootNode $_.properties.distinguishedname[0] $_.properties.name[0] -Type $Type -HasChildren $true
 					}
@@ -381,9 +404,26 @@ function Choose-ADOrganizationalUnit
 				}
 				New-Variable -Name DomainDN -Value $DomainDN -Scope 1
 			}
-			$root = [ADSI]''
-			New-Variable -Name ADSearcher -Value (new-object System.DirectoryServices.DirectorySearcher($root)) -Scope 1
-			$cb_AdvancedFeatures.Checked = $AdvancedFeatures
+            If ($Credential)
+            {
+                $Credential = Get-Credential $Credential -Message "Please enter credentials to connect to domain '$Domain'"
+			    try
+			    {
+				    $root = New-Object -TypeName System.DirectoryServices.DirectoryEntry("LDAP://$DomainDN",$Credential.UserName,$Credential.GetNetworkCredential().password)
+			    }
+			    catch
+			    {
+				    Show-Error "Unable to connect to domain '$Domain'."
+				    $host.SetShouldExit(1)
+	    		    return
+			    }
+            }
+            else
+            {
+			    $root = [ADSI]''
+            }
+            $ADSearcher = New-Object System.DirectoryServices.DirectorySearcher($root)
+			New-Variable -Name ADSearcher -Value $ADSearcher -Scope 1
 			New-Variable -Name Forest -Value $forest -Scope 1
 		}
 		elseif ($Domain)
@@ -400,25 +440,46 @@ function Choose-ADOrganizationalUnit
 			ElseIf ($Domain -match 'DC=\w+,DC+')
 			{
 				$DomainDN = $Domain
+                $Domain = $Domain.Replace('DC=','.').TrimStart('DC=')
 			}
 			New-Variable -Name DomainDN -Value $DomainDN -Scope 1
-			$ADCred = Get-Credential $Credential -Message "Please enter credentials to connect to domain '$Domain'"
+			$Credential = Get-Credential $Credential -Message "Please enter credentials to connect to domain '$Domain'"
 			try
 			{
-				$root = New-Object -TypeName System.DirectoryServices.DirectoryEntry -ArgumentList $DomainDN ,$($ADCred.UserName),$($ADCred.GetNetworkCredential().password)
+                $DomainIP = (Test-Connection $Domain -Count 1 -ea 0).IPV4Address.IPAddressToString
+				$root = New-Object -TypeName System.DirectoryServices.DirectoryEntry("LDAP://$DomainIP",$Credential.UserName,$Credential.GetNetworkCredential().password)
+                New-Variable -Name DomainIP -Value $DomainIP -Scope 1
 			}
 			catch
 			{
-				Show-Error "Unable to connect to domain '$Domain' with the provided credentials."
+				Show-Error "Unable to connect to domain '$Domain'."
 				$host.SetShouldExit(1)
-	    		exit
+	    		return
 			}
-			New-Variable -Name ADSearcher -Value (new-object System.DirectoryServices.DirectorySearcher($root)) -Scope 1
+            $ADSearcher = new-object System.DirectoryServices.DirectorySearcher($root)
+		    New-Variable -Name ADSearcher -Value $ADSearcher -Scope 1
 		}
+        else
+        {
+            $Domain = Read-Host 'Please enter a domain to connect to'
+            If ($Domain)
+            {
+                & $FormEvent_Load
+            }
+            else
+            {
+                return
+            }
+        }
+        If ($Credential)
+        {
+            Set-Variable -Name Credential -Value $Credential -Scope 1 -Force
+        }
 		If ($MultiSelect)
 		{
 			$Treeview.CheckBoxes = $true
 		}
+        $cb_AdvancedFeatures.Checked = $AdvancedFeatures
 	}
 	
 	$CreateOU=[System.Windows.Forms.NodeLabelEditEventHandler]{
@@ -1108,4 +1169,3 @@ A///AAIACw=='))
     return $SelectedObject
 
 } #End Function Choose-ADOrganizationalUnit
-
