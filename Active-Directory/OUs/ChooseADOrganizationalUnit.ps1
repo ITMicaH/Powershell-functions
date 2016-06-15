@@ -12,6 +12,8 @@
    Show folders shown in advanced features at startup.
 .PARAMETER HideNewOUFeature
    Hides the ability to create a new organizational unit from the context menu.
+.PARAMETER MultiSelect
+   Adds checkboxes to all nodes so multiple objects can be selected.
 .EXAMPLE
    Choose-ADOrganizationalUnit -HideNewOUFeature
    This command will show the form containing the OU structure of the
@@ -32,26 +34,36 @@
 #>
 function Choose-ADOrganizationalUnit
 {
-	[CmdletBinding()]
+    [CmdletBinding()]
     Param
     (
-        #Name or Distinguished Name of the domain you want to view
+        #FQDN or Distinguished Name of the domain you want to view
         [Parameter(ValueFromPipelineByPropertyName=$true,
                    Position=0)]
         [Alias("DistinguishedName")]
-	    [string]
+	[string]
         $Domain,
+	
+	#Credentials for connecting to ActiveDirectory domain
+	[Parameter(Mandatory=$false,
+                   Position=1)]
+	$Credential,
 
         #Enable Advanced features on startup
         [switch]
         $AdvancedFeatures,
-
-        #Hide the ability to create OU's
+	
+	#Hide the ability to create OU's
         [switch]
-        $HideNewOUFeature
+        $HideNewOUFeature,
+
+        #Add checkboxes so multiple objects can be selected
+        [switch]
+        $MultiSelect
     )
+
     
-	#region Import Assemblies
+	#region Import the Assemblies
 	
 	[void][reflection.assembly]::Load("mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089")
 	[void][reflection.assembly]::Load("System.Windows.Forms, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089")
@@ -63,9 +75,9 @@ function Choose-ADOrganizationalUnit
 	[void][reflection.assembly]::Load("System.Core, Version=3.5.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089")
 	[void][reflection.assembly]::Load("System.ServiceProcess, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a")
 	[void][reflection.assembly]::Load("System.Design, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a")
-
 	#endregion Import Assemblies
 
+	
 	#region Form Objects
 	
 	[System.Windows.Forms.Application]::EnableVisualStyles()
@@ -78,9 +90,9 @@ function Choose-ADOrganizationalUnit
 	$changeDomainToolStripMenuItem = New-Object 'System.Windows.Forms.ToolStripMenuItem'
 	$newOUToolStripMenuItem = New-Object 'System.Windows.Forms.ToolStripMenuItem'
 	$InitialFormWindowState = New-Object 'System.Windows.Forms.FormWindowState'
-
 	#endregion Form Objects
 
+	
 	#region Functions
 	
 	function Show-Error
@@ -88,7 +100,7 @@ function Choose-ADOrganizationalUnit
 		Param([string]$Message)
 		
 		$msgbox = [System.Windows.Forms.MessageBox]::Show($Message,"Exception Report",0,16)
-	} #End Function
+	}
 	
 	function Add-Node 
 	{ 
@@ -117,7 +129,7 @@ function Choose-ADOrganizationalUnit
 			}
 	        $RootNode.Nodes.Add($newNode) | Out-Null 
 	        $newNode
-	} #End Function
+	} 
 	
 	function Get-NextLevel
 	{
@@ -169,7 +181,7 @@ function Choose-ADOrganizationalUnit
 		        }
 		    }
 		}
-	} #End Function
+	}
 	
 	function Build-TreeView
 	{ 
@@ -194,7 +206,7 @@ function Choose-ADOrganizationalUnit
 		
 		$treeNodes.Expand()
 		$RootDomainNode.Expand()
-	} #End Function
+	} 
 	
 	function ChangeDomain
     {
@@ -324,17 +336,57 @@ function Choose-ADOrganizationalUnit
 	        $TreeviewForest.SelectedNode.Name
 	    }
 	
-	} #End Function
-	
-    #endregion Functions
-    
-	#region Events
+	}
 
-    $FormEvent_Load={
+    #endregion Functions
+	
+    #region Script
+
+	$FormEvent_Load={
 		
-		$forest = [System.DirectoryServices.ActiveDirectory.Forest]::GetCurrentForest()
-		#Validate Domain variable if present
-		If ($Domain)
+		If ((gwmi win32_computersystem).partofdomain)
+		{
+			$forest = [System.DirectoryServices.ActiveDirectory.Forest]::GetCurrentForest()
+			#Validate Domain variable if present
+			If ($Domain)
+			{
+				If ($Domain -match 'CN=|OU=')
+				{
+					throw "'$Domain' is not a domain distinguished name."
+					$formChooseOU.Close()
+				}
+				ElseIf ($Domain -match '\w+\.\w+')
+				{
+					If ($forest.Domains.Name -contains $Domain)
+					{
+						$DomainDN = "DC=$($Domain.ToUpper())" -replace '\.',',DC='
+					}
+					else
+		            {
+		                throw "No domain found with FQDN '$Domain'."
+						$formChooseOU.Close()
+		            }
+				}
+				ElseIf ($Domain -match 'DC=\w+,DC+')
+				{
+					If ([adsi]::exists("LDAP://$Domain"))
+			        {
+			            $DomainDN = $Domain
+			        }
+			        else
+			        {
+			            throw "'$Domain' does not exist in Active Directory."
+						$formChooseOU.Close()
+			        }
+				}
+				New-Variable -Name DomainDN -Value $DomainDN -Scope 1
+			}
+			$root = [ADSI]''
+			New-Variable -Name ADSearcher -Value (new-object System.DirectoryServices.DirectorySearcher($root)) -Scope 1
+			$cb_AdvancedFeatures.Checked = $AdvancedFeatures
+			New-Variable -Name Forest -Value $forest -Scope 1
+		}
+		elseif ($Domain)
 		{
 			If ($Domain -match 'CN=|OU=')
 			{
@@ -343,34 +395,30 @@ function Choose-ADOrganizationalUnit
 			}
 			If ($Domain -match '\w+\.\w+')
 			{
-				If ($forest.Domains.Name -contains $Domain)
-				{
-					$DomainDN = "DC=$($Domain.ToUpper())" -replace '\.',',DC='
-				}
-				else
-	            {
-	                throw "No domain found named '$Domain'."
-					$formChooseOU.Close()
-	            }
+				$DomainDN = "DC=$($Domain.ToUpper())" -replace '\.',',DC='
 			}
-			If ($Domain -match 'DC=\w+,DC+')
+			ElseIf ($Domain -match 'DC=\w+,DC+')
 			{
-				If ([adsi]::exists("LDAP://$Domain"))
-		        {
-		            $DomainDN = $Domain
-		        }
-		        else
-		        {
-		            throw "'$Domain' does not exist in Active Directory."
-					$formChooseOU.Close()
-		        }
+				$DomainDN = $Domain
 			}
 			New-Variable -Name DomainDN -Value $DomainDN -Scope 1
+			$ADCred = Get-Credential $Credential -Message "Please enter credentials to connect to domain '$Domain'"
+			try
+			{
+				$root = New-Object -TypeName System.DirectoryServices.DirectoryEntry -ArgumentList $DomainDN ,$($ADCred.UserName),$($ADCred.GetNetworkCredential().password)
+			}
+			catch
+			{
+				Show-Error "Unable to connect to domain '$Domain' with the provided credentials."
+				$host.SetShouldExit(1)
+	    		exit
+			}
+			New-Variable -Name ADSearcher -Value (new-object System.DirectoryServices.DirectorySearcher($root)) -Scope 1
 		}
-		$root = [ADSI]''
-		New-Variable -Name ADSearcher -Value (new-object System.DirectoryServices.DirectorySearcher($root)) -Scope 1
-		$cb_AdvancedFeatures.Checked = $AdvancedFeatures
-		New-Variable -Name Forest -Value $forest -Scope 1
+		If ($MultiSelect)
+		{
+			$Treeview.CheckBoxes = $true
+		}
 	}
 	
 	$CreateOU=[System.Windows.Forms.NodeLabelEditEventHandler]{
@@ -460,7 +508,7 @@ function Choose-ADOrganizationalUnit
 	}
 	
 	$buttonOK_Click={
-		If ($Treeview.SelectedNode)
+		If ($Treeview.SelectedNode -and !$MultiSelect)
 		{
 			New-Variable -Scope 1 -Name SelectedObject -Value ([pscustomobject]@{
 				Name = $Treeview.SelectedNode.Text
@@ -551,7 +599,7 @@ function Choose-ADOrganizationalUnit
 				return
 			}
 			$ContextMenu.Items.Clear()
-			if ($_.Node.ImageIndex -lt 3)
+			if ($_.Node.ImageIndex -lt 3 -and (gwmi win32_computersystem).partofdomain)
 			{
 				$ContextMenu.Items.Add($changeDomainToolStripMenuItem)
 			}
@@ -566,6 +614,45 @@ function Choose-ADOrganizationalUnit
 		}
 	}
 	
+	$Treeview_BeforeCheck=[System.Windows.Forms.TreeViewCancelEventHandler]{
+	#Event Argument: $_ = [System.Windows.Forms.TreeViewCancelEventArgs]
+		#Prevent checking root node
+		if($_.Node.ImageIndex -eq 1)
+	    {
+	        $_.Cancel = $true
+	    }
+	}
+	
+	$Treeview_AfterCheck=[System.Windows.Forms.TreeViewEventHandler]{
+	#Event Argument: $_ = [System.Windows.Forms.TreeViewEventArgs]
+		If (!$SelectedObject)
+		{
+			New-Variable -Name SelectedObject -Scope 1 -Value (New-Object collections.arraylist)
+		}
+		If ($_.Node.Checked)
+		{
+			$SelectedObject.Add([pscustomobject]@{
+				Name = $_.Node.Text
+				DistinguishedName = $_.Node.Name
+			})
+		}
+		else
+		{
+			$DN = $_.Node.Name
+			$SelectedObject | %{
+				If ($_.DistinguishedName -eq $DN)
+				{
+					$Remove = $_
+				}
+			}
+			$SelectedObject.Remove($Remove)
+		}
+	}
+	
+	#endregion Script
+	
+	#region Events
+	
 	$Form_StateCorrection_Load=
 	{
 		#Correct the initial state of the form to prevent the .Net maximized form issue
@@ -579,6 +666,8 @@ function Choose-ADOrganizationalUnit
 		{
 			$cb_AdvancedFeatures.remove_CheckedChanged($cb_AdvancedFeatures_CheckedChanged)
 			$Treeview.remove_AfterLabelEdit($CreateOU)
+			$Treeview.remove_BeforeCheck($Treeview_BeforeCheck)
+			$Treeview.remove_AfterCheck($Treeview_AfterCheck)
 			$Treeview.remove_BeforeExpand($Treeview_BeforeExpand)
 			$Treeview.remove_NodeMouseClick($Treeview_NodeMouseClick)
 			$Treeview.remove_DoubleClick($Treeview_DoubleClick)
@@ -593,9 +682,8 @@ function Choose-ADOrganizationalUnit
 		catch [Exception]
 		{ }
 	}
-
 	#endregion Events
-	
+
 	#region Form Code
 	
 	#
@@ -907,6 +995,8 @@ AADAAwAAwAMAAMADAADAAwAAwAMAAP//AAA=')
 	$Treeview.Size = '301, 442'
 	$Treeview.TabIndex = 1
 	$Treeview.add_AfterLabelEdit($CreateOU)
+	$Treeview.add_BeforeCheck($Treeview_BeforeCheck)
+	$Treeview.add_AfterCheck($Treeview_AfterCheck)
 	$Treeview.add_BeforeExpand($Treeview_BeforeExpand)
 	$Treeview.add_NodeMouseClick($Treeview_NodeMouseClick)
 	$Treeview.add_DoubleClick($Treeview_DoubleClick)
@@ -931,7 +1021,7 @@ AADAAwAAwAMAAMADAADAAwAAwAMAAP//AAA=')
 AAEAAAD/////AQAAAAAAAAAMAgAAAFdTeXN0ZW0uV2luZG93cy5Gb3JtcywgVmVyc2lvbj00LjAu
 MC4wLCBDdWx0dXJlPW5ldXRyYWwsIFB1YmxpY0tleVRva2VuPWI3N2E1YzU2MTkzNGUwODkFAQAA
 ACZTeXN0ZW0uV2luZG93cy5Gb3Jtcy5JbWFnZUxpc3RTdHJlYW1lcgEAAAAERGF0YQcCAgAAAAkD
-AAAADwMAAABwCgAAAk1TRnQBSQFMAgEBBAEAAVABAAFQAQABEAEAARABAAT/AQkBAAj/AUIBTQE2
+AAAADwMAAABwCgAAAk1TRnQBSQFMAgEBBAEAAWABAAFgAQABEAEAARABAAT/AQkBAAj/AUIBTQE2
 AQQGAAE2AQQCAAEoAwABQAMAASADAAEBAQABCAYAAQgYAAGAAgABgAMAAoABAAGAAwABgAEAAYAB
 AAKAAgADwAEAAcAB3AHAAQAB8AHKAaYBAAEzBQABMwEAATMBAAEzAQACMwIAAxYBAAMcAQADIgEA
 AykBAANVAQADTQEAA0IBAAM5AQABgAF8Af8BAAJQAf8BAAGTAQAB1gEAAf8B7AHMAQABxgHWAe8B
@@ -990,12 +1080,12 @@ A///AAIACw=='))
 	[void]$ContextMenu.Items.Add($changeDomainToolStripMenuItem)
 	[void]$ContextMenu.Items.Add($newOUToolStripMenuItem)
 	$ContextMenu.Name = "ContextMenu"
-	$ContextMenu.Size = '204, 48'
+	$ContextMenu.Size = '170, 26'
 	#
 	# changeDomainToolStripMenuItem
 	#
 	$changeDomainToolStripMenuItem.Name = "changeDomainToolStripMenuItem"
-	$changeDomainToolStripMenuItem.Size = '203, 22'
+	$changeDomainToolStripMenuItem.Size = '169, 22'
 	$changeDomainToolStripMenuItem.Text = "Change Domain..."
 	$changeDomainToolStripMenuItem.add_Click($changeDomainToolStripMenuItem_Click)
 	#
@@ -1014,11 +1104,8 @@ A///AAIACw=='))
 	#Clean up the control events
 	$formChooseOU.add_FormClosed($Form_Cleanup_FormClosed)
 	#Show the Form
-	$Output = $formChooseOU.ShowDialog()
-    If ($Output -eq 'OK')
-    {
-        return $SelectedObject
-    }
+	$formChooseOU.ShowDialog() | Out-Null
+    return $SelectedObject
 
 } #End Function Choose-ADOrganizationalUnit
 
