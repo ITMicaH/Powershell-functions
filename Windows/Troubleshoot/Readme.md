@@ -19,4 +19,4 @@ Example:
 
 `PS\> Disable-WERUserModeDumps -ComputerName PC001,PC002`
 
-Enables User-Mode dumps on PC001 and PC002.
+Disables User-Mode dumps on PC001 and PC002.
