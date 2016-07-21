@@ -33,7 +33,8 @@
 .NOTES
    Author: Michaja van der Zouwen
    Date  : 21-7-2016
-.LINKS
+.LINK
+   https://itmicah.wordpress.com
 #>
 function Enable-WERUserModeDumps
 {
@@ -77,17 +78,21 @@ function Enable-WERUserModeDumps
 
     Begin
     {
-        Write-Verbose "Validating 'Application' parameter value..."
-        switch -regex ($Application)
+        
+        If ($Process)
         {
-            '.+\.exe$'   {Write-Verbose "Parameter value is valid.";break}
-            '^.+(\..+)$' {throw "Invalid extension '$($Matches[1])' detected. Make sure the application has a '.exe' extension."}
-            default      {$Application = "$Application.exe";Write-Verbose "Added '.exe' extension to application value."}
+            Write-Verbose "Validating 'Process' parameter value..."
+            switch -regex ($Process)
+            {
+                '.+\.exe$'   {Write-Verbose "Parameter value is valid.";break}
+                '^.+(\..+)$' {throw "Invalid extension '$($Matches[1])' detected. Make sure the process has a '.exe' extension."}
+                default      {$Process = "$Process.exe";Write-Verbose "Added '.exe' extension to process value."}
+            }
         }
         If ($DumpType -ne 'CustomDump' -and $CustomDumpFlags -ne 121)
-        {
-            Throw "The parameter 'CustomDumpFlags' can only be used when 'DumpType' is set to 'CustomDump'."
-        }
+            {
+                Throw "The parameter 'CustomDumpFlags' can only be used when 'DumpType' is set to 'CustomDump'."
+            }
         switch ($DumpType)
         {
             'CustomDump' {$DumpTypeData = 0}
@@ -158,14 +163,14 @@ function Enable-WERUserModeDumps
                 Write-Verbose "->`tKey created."
             }
             $DumpKey = $Key.OpenSubKey('LocalDumps',$true)
-            If ($Application)
+            If ($Process)
             {
-                If ($DumpKey.GetSubKeyNames() -notcontains $Application)
+                If ($DumpKey.GetSubKeyNames() -notcontains $Process)
                 {
-                    Write-Verbose "->`tCreating '$Application' subkey..."
+                    Write-Verbose "->`tCreating '$Process' subkey..."
                     try
                     {
-                        $null = $DumpKey.CreateSubKey($Application)
+                        $null = $DumpKey.CreateSubKey($Process)
                     }
                     catch
                     {
@@ -174,7 +179,7 @@ function Enable-WERUserModeDumps
                     }
                     Write-Verbose "->`tSubkey created."
                 }
-                $DumpKey = $DumpKey.OpenSubKey($Application,$true)
+                $DumpKey = $DumpKey.OpenSubKey($Process,$true)
             }
             Write-Verbose "->`tSetting values for Application crash dumps..."
             try
@@ -217,6 +222,98 @@ function Enable-WERUserModeDumps
                 {
                     Write-Verbose "->`tService started."
                 }
+            }
+            Write-Verbose "Finished processing computer."
+        } #end foreach computer
+    }
+    End
+    {
+        Write-Verbose 'All computers have been processed.'
+    }
+}
+
+<#
+.Synopsis
+   Disable User-Mode (Application Crash) dumps on a computer.
+.DESCRIPTION
+   Disables User-Mode (Application Crash) dumps on a local or remote computer.
+   Requires to be run under an account with admin rights on the computer.
+.PARAMETER ComputerName
+   The name(s) of the computer(s) where you want to disable User-Mode dumps.
+.EXAMPLE
+   Disable-WERUserModeDumps -ComputerName PC001,PC002
+   Disables User-Mode dumps on PC001 and PC002.
+.NOTES
+   Author: Michaja van der Zouwen
+   Date  : 21-7-2016
+.LINK
+   https://itmicah.wordpress.com
+#>
+function Disable-WERUserModeDumps
+{
+    [CmdletBinding()]
+    Param
+    (
+        # Computer to enable dumps on
+        [Parameter(ValueFromPipelineByPropertyName=$true,
+                   Position=0)]
+        [Alias('DNSHostName')]
+        [string[]]
+        $ComputerName = 'localhost'
+    )
+
+    Process
+    {
+        foreach ($Computer in $ComputerName)
+        {
+            Write-Verbose "Processing computer '$Computer'..."
+
+            Write-Verbose "->`tConnecting to registry..."
+            try
+            {
+                $Reg = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('LocalMachine', $Computer)
+            }
+            catch
+            {
+                Write-Error $_
+                continue
+            }
+            Write-Verbose "->`tConnection established."
+            
+            $Key = $Reg.OpenSubKey('SOFTWARE\Microsoft\Windows\Windows Error Reporting',$true)
+            If ($Key.GetSubKeyNames() -contains 'LocalDumps')
+            {
+                Write-Verbose "->`tDeleting LocalDumps registry key..."
+                Try
+                {
+                    $Key.DeleteSubKeyTree('LocalDumps')
+                }
+                catch
+                {
+                    Write-Error $_
+                    continue
+                }
+                Write-Verbose "->`tKey deleted."
+            }
+            else
+            {
+                Write-Error "User-Mode dumps are not enabled on computer '$Computer'."
+                continue
+            }
+            Write-Verbose "`tChecking WER Service (WerSvc) status..."
+            $WerSVC = Get-Service WerSvc -ComputerName $Computer
+            If ($WerSVC.Status -eq 'Running')
+            {
+                Write-Verbose "->`tStopping service..."
+                $WerSVC | Stop-Service
+                If ($?)
+                {
+                    Write-Verbose "->`tService stopped."
+                }
+            }
+            else
+            {
+                Write-Verbose "->`tService not running."
             }
             Write-Verbose "Finished processing computer."
         } #end foreach computer
