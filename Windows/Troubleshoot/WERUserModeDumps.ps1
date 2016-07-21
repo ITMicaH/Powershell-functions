@@ -139,51 +139,38 @@ function Enable-WERUserModeDumps
             try
             {
                 $Reg = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('LocalMachine', $Computer)
+                Write-Verbose "->`tConnection established."
             }
             catch
             {
                 Write-Error $_
                 continue
             }
-            Write-Verbose "->`tConnection established."
-            
-            $Key = $Reg.OpenSubKey('SOFTWARE\Microsoft\Windows\Windows Error Reporting',$true)
-            If ($Key.GetSubKeyNames() -notcontains 'LocalDumps')
-            {
-                Write-Verbose "->`tCreating LocalDumps registry key..."
-                Try
-                {
-                    $Null = $Key.CreateSubKey('LocalDumps')
-                }
-                catch
-                {
-                    Write-Error $_
-                    continue
-                }
-                Write-Verbose "->`tKey created."
-            }
-            $DumpKey = $Key.OpenSubKey('LocalDumps',$true)
-            If ($Process)
-            {
-                If ($DumpKey.GetSubKeyNames() -notcontains $Process)
-                {
-                    Write-Verbose "->`tCreating '$Process' subkey..."
-                    try
-                    {
-                        $null = $DumpKey.CreateSubKey($Process)
-                    }
-                    catch
-                    {
-                        Write-Error $_
-                        continue
-                    }
-                    Write-Verbose "->`tSubkey created."
-                }
-                $DumpKey = $DumpKey.OpenSubKey($Process,$true)
-            }
-            Write-Verbose "->`tSetting values for Application crash dumps..."
             try
             {
+                $Key = $Reg.OpenSubKey('SOFTWARE\Microsoft\Windows\Windows Error Reporting',$true)
+                If ($Key.GetSubKeyNames() -notcontains 'LocalDumps')
+                {
+                    Write-Verbose "->`tCreating LocalDumps registry key..."
+                    $Null = $Key.CreateSubKey('LocalDumps')
+                    Write-Verbose "->`tKey created."
+                }
+                else
+                {
+                    Write-Verbose "->`tKey already exists."
+                }
+                $DumpKey = $Key.OpenSubKey('LocalDumps',$true)
+                If ($Process)
+                {
+                    If ($DumpKey.GetSubKeyNames() -notcontains $Process)
+                    {
+                        Write-Verbose "->`tCreating '$Process' subkey..."
+                        $null = $DumpKey.CreateSubKey($Process)
+                        Write-Verbose "->`tSubkey created."
+                    }
+                    $DumpKey = $DumpKey.OpenSubKey($Process,$true)
+                }
+                Write-Verbose "->`tSetting values for User-Mode dumps..."
                 $Null = $DumpKey.SetValue('DumpFolder', $DumpFolder, [Microsoft.Win32.RegistryValueKind]::ExpandString)
                 Write-Verbose "`t->`tDumpFolder value set to '$DumpFolder'"
                 $Null = $DumpKey.SetValue('DumpCount', $DumpCount, [Microsoft.Win32.RegistryValueKind]::DWORD)
@@ -200,9 +187,10 @@ function Enable-WERUserModeDumps
             catch
             {
                 Write-Error $_
+                $Reg.Close()
                 continue
             }
-            $reg.Close()
+            $Reg.Close()
             Write-Verbose "->`tRegistry connection closed."
             $WerSVC = Get-Service WerSvc -ComputerName $Computer
             If ($WerSVC.Status -eq 'Running')
@@ -300,7 +288,7 @@ function Disable-WERUserModeDumps
                 Write-Error "User-Mode dumps are not enabled on computer '$Computer'."
                 continue
             }
-            Write-Verbose "`tChecking WER Service (WerSvc) status..."
+            Write-Verbose "->`tChecking WER Service (WerSvc) status..."
             $WerSVC = Get-Service WerSvc -ComputerName $Computer
             If ($WerSVC.Status -eq 'Running')
             {
