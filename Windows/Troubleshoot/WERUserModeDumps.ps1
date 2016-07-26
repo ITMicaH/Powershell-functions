@@ -3,7 +3,8 @@
    Enable User-Mode (Application Crash) dumps on a computer.
 .DESCRIPTION
    Enables User-Mode (Application Crash) dumps using Windows Error Reporting on a local or remote computer.
-   Requires to be run under an account with admin rights on the computer.
+   Requires to be run under an account with admin rights on the computer. In order to run this on a local
+   computer elevation is required.
 .PARAMETER ComputerName
    The name(s) of the computer(s) where you want to enable User-Mode dumps.
 .PARAMETER Process
@@ -225,7 +226,8 @@ function Enable-WERUserModeDumps
    Disable User-Mode (Application Crash) dumps on a computer.
 .DESCRIPTION
    Disables User-Mode (Application Crash) dumps on a local or remote computer.
-   Requires to be run under an account with admin rights on the computer.
+   Requires to be run under an account with admin rights on the computer. In order to run this on a local
+   computer elevation is required.
 .PARAMETER ComputerName
    The name(s) of the computer(s) where you want to disable User-Mode dumps.
 .EXAMPLE
