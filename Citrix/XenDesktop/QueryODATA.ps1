@@ -29,7 +29,8 @@
    Retreives all sessions initiated by the user of the previous example.
 .EXAMPLE
    $UsedClients = $UserSessions[0..4].GetConnections($true).ClientName
-   Retreives names of all the clients the user of the previous example has run his/hers first five sessions on.
+   Retreives names of all the clients the user of the previous example has run his/hers first five sessions on 
+   and shows verbose information..
 .EXAMPLE
    $Machine = DesktopGroupMachine -Name VDI001
    PS C:\>$Machine.GetMachineHotfixLogs().GetHotfix()
