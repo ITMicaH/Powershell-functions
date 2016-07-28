@@ -32,7 +32,7 @@
    Retreives names of all the clients the user of the previous example has run his/hers first five sessions on 
    and shows verbose information..
 .EXAMPLE
-   $Machine = DesktopGroupMachine -Name VDI001
+   $Machine = Get-CitrixODATAInformation -Server SVR-CDC-001 -Type Machine -Name VDI001
    PS C:\>$Machine.GetMachineHotfixLogs().GetHotfix()
 
 
