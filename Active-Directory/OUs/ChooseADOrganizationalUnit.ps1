@@ -32,8 +32,15 @@
    PowerShell object with Name and Distinguished Name of chosen organizational unit.
 .NOTES
    Author : Michaja van der Zouwen
-   version: 2.1
-   Date   : 15-6-2016
+   version: 2.2
+   Date   : 10-11-2016
+
+   New in this version: 
+
+   *  Change domain option in context menu disabled when only one domain is detected.
+   *  Fixed an issue with domains starting with a 'D'
+
+   Special thanks to @danSpotter for bringing these issues to light!
 .LINK
    https://itmicah.wordpress.com/2016/03/29/active-directory-ou-picker-revisited/
 #>
@@ -213,7 +220,7 @@ function Choose-ADOrganizationalUnit
 		#Generate rootdomain node and add subdomain nodes
 		If ($DomainDN)
 		{
-			$DomainName = $DomainDN.Replace(',DC=','.').TrimStart('DC=')
+			$DomainName = $DomainDN.Replace(',DC=','.').Substring(3)
 			$RootDomainNode = Add-Node -dname $DomainDN `
 			-name $DomainName -RootNode $treeNodes -Type Domain
 		}
@@ -480,6 +487,14 @@ function Choose-ADOrganizationalUnit
 			$Treeview.CheckBoxes = $true
 		}
         $cb_AdvancedFeatures.Checked = $AdvancedFeatures
+        If ($forest.Domains.Count -gt 1)
+	    {
+		    $changeDomainToolStripMenuItem.Enabled = $true
+	    }
+	    else
+	    {
+		    $changeDomainToolStripMenuItem.Enabled = $false
+	    }
 	}
 	
 	$CreateOU=[System.Windows.Forms.NodeLabelEditEventHandler]{
