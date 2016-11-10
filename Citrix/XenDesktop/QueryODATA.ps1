@@ -4,7 +4,8 @@
 .DESCRIPTION
    Uses the oDATA API to query information on a Citrix XenApp/XenDesktop environment.
    Output objects are supplied with ScriptMethods which allow you to navigate directly to
-   related information objects (entities).
+   related information objects (entities). The ScriptMethods can display verbose information
+   by setting the input parameter to $true (example 6).
 .PARAMETER Server
    The name of the Citrix server (Director) you want to use.
 .PARAMETER Type
@@ -30,7 +31,7 @@
 .EXAMPLE
    $UsedClients = $UserSessions[0..4].GetConnections($true).ClientName
    Retreives names of all the clients the user of the previous example has run his/hers first five sessions on 
-   and shows verbose information..
+   and shows verbose information.
 .EXAMPLE
    $Machine = Get-CitrixODATAInformation -Server SVR-CDC-001 -Type Machine -Name VDI001
    PS C:\>$Machine.GetMachineHotfixLogs().GetHotfix()
@@ -109,7 +110,7 @@ function Get-CitrixODATAInformation
                 $Password = $Matches[2] | ConvertTo-SecureString
                 $Credential = [System.Management.Automation.PSCredential]::new($Matches[1],$Password)
             }
-            else
+            elseif ($Credential -isnot [PSCredential])
             {
                 $Credential = Get-Credential $Credential -Message "Please provide credentials for oData connection"
             }
@@ -203,7 +204,7 @@ function Get-CitrixODATAInformation
                     switch -Regex ($Member.Definition)
                     {
                         Date       {If ($Properties.$($Member.Name).innertext)
-                                       {$MemberParams['Value'] = [datetime]$Properties.$($Member.Name).innertext;break}}
+                                       {$MemberParams['Value'] = (Get-Date $Properties.$($Member.Name).innertext).ToLocalTime();break}}
                         XmlElement {$MemberParams['Value'] = $Properties.$($Member.Name).innertext;break}
                     }
                     If ($MemberParams.Value -match '^\d{1,2}$')
