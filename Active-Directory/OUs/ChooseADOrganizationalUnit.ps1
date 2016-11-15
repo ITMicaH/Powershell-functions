@@ -76,7 +76,7 @@ function Choose-ADOrganizationalUnit
 
     
 	#region Import the Assemblies
-	
+
 	[void][reflection.assembly]::Load("mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089")
 	[void][reflection.assembly]::Load("System.Windows.Forms, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089")
 	[void][reflection.assembly]::Load("System.Drawing, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a")
@@ -89,9 +89,9 @@ function Choose-ADOrganizationalUnit
 	[void][reflection.assembly]::Load("System.Design, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a")
 	#endregion Import Assemblies
 
-	
+
 	#region Form Objects
-	
+
 	[System.Windows.Forms.Application]::EnableVisualStyles()
 	$formChooseOU = New-Object 'System.Windows.Forms.Form'
 	$cb_AdvancedFeatures = New-Object 'System.Windows.Forms.CheckBox'
@@ -104,43 +104,62 @@ function Choose-ADOrganizationalUnit
 	$InitialFormWindowState = New-Object 'System.Windows.Forms.FormWindowState'
 	#endregion Form Objects
 
-	
 	#region Functions
-	
+
 	function Show-Error
 	{
 		Param([string]$Message)
-		
+
 		$msgbox = [System.Windows.Forms.MessageBox]::Show($Message,"Exception Report",0,16)
 	}
 	
+    function Test-LDAPConnection
+    {
+	    Param(
+		    $ComputerName
+	    )
+	    $TCPClient = New-Object Net.Sockets.TcpClient
+	    $TCPClient.Connect($ComputerName,389)
+	    $TestOutput = [pscustomobject]@{
+		    ComputerName = $ComputerName
+		    Connected = $TCPClient.Connected
+		    IPAddress = ''
+	    }
+	    If ($TCPClient.Connected)
+	    {
+		    $TestOutput.IPAddress = $TCPClient.Client.RemoteEndPoint.Address.IPAddressToString
+	    }
+	    $TCPClient.Close()
+	    $TestOutput
+    }
+
 	function Add-Node 
 	{ 
-	        param ( 
-	            $RootNode, 
-	            $dname,
-	            $name,
-	            $Type,
-				$HasChildren = $true
-	        )
-			
-	        $newNode = new-object System.Windows.Forms.TreeNode
-		    $newNode.Name = $dname 
-		    $newNode.Text = $name
-			If ($HasChildren)
-			{
-				$newNode.Nodes.Add('') | Out-Null
-			}
-			switch ($Type) {
-				organizationalunit	{$newnode.ImageIndex = 3
-									$newNode.SelectedImageIndex = 3}
-				Domain 				{$newNode.ImageIndex = 2
-									$newNode.SelectedImageIndex = 2}
-				Default				{$newnode.ImageIndex = 0
-									$newNode.SelectedImageIndex = 0}
-			}
-	        $RootNode.Nodes.Add($newNode) | Out-Null 
-	        $newNode
+		param ( 
+			$RootNode, 
+			$dname,
+			$name,
+			$Type,
+			$HasChildren = $true
+		)
+
+		$newNode = new-object System.Windows.Forms.TreeNode
+		$newNode.Name = $dname 
+		$newNode.Text = $name
+		If ($HasChildren)
+		{
+			$newNode.Nodes.Add('') | Out-Null
+		}
+		switch ($Type) {
+			organizationalunit	{$newnode.ImageIndex = 3
+								$newNode.SelectedImageIndex = 3}
+			Domain 				{$newNode.ImageIndex = 2
+								$newNode.SelectedImageIndex = 2}
+			Default				{$newnode.ImageIndex = 0
+								$newNode.SelectedImageIndex = 0}
+		}
+		$RootNode.Nodes.Add($newNode) | Out-Null 
+		$newNode
 	} 
 	
 	function Get-NextLevel
@@ -164,7 +183,14 @@ function Choose-ADOrganizationalUnit
 		{
             If ($DomainIP)
             {
-                $ADsearcher.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$DomainIP/$($RootNode.Name)",$Credential.UserName,$Credential.GetNetworkCredential().password)
+                If ($Credential)
+                {
+                    $ADsearcher.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$DomainIP/$($RootNode.Name)",$Credential.UserName,$Credential.GetNetworkCredential().password)
+                }
+                else
+                {
+                    $ADsearcher.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$DomainIP/$($RootNode.Name)")
+                }
             }
             elseif ($Credential)
             {
@@ -238,9 +264,8 @@ function Choose-ADOrganizationalUnit
 		$RootDomainNode.Expand()
 	} 
 	
-	function ChangeDomain
+	function Change-Domain
     {
-	
 		#region Form Objects
 		
 		$formBrowseForDomain = New-Object 'System.Windows.Forms.Form'
@@ -248,6 +273,7 @@ function Choose-ADOrganizationalUnit
 		$TreeviewForest = New-Object 'System.Windows.Forms.TreeView'
 		$buttonCancelDomain = New-Object 'System.Windows.Forms.Button'
 		$buttonOKDomain = New-Object 'System.Windows.Forms.Button'
+        $buttonChangeForest = New-Object 'System.Windows.Forms.Button'
 		$InitialFormWindowState = New-Object 'System.Windows.Forms.FormWindowState'
 	
 		#endregion Form Objects
@@ -257,8 +283,13 @@ function Choose-ADOrganizationalUnit
 		$FormEvent_Shown={
 			#Create domains treeview
 			$DName = $forest.RootDomain.GetDirectoryEntry().distinguishedName
-			$RootDomainNode = Add-Node -dname $Dname `
-			    -name $forest.RootDomain.Name -RootNode $TreeviewForest -Type Domain
+            $NodeProps = @{
+                dname = $Dname
+                name = $forest.RootDomain.Name
+                RootNode = $TreeviewForest
+                Type = 'Domain'
+            }
+			$RootDomainNode = Add-Node @NodeProps
 		    Get-NextLevel -RootNode $RootDomainNode -Type Domain
 			$TreeviewForest.ExpandAll()
 		}
@@ -290,6 +321,27 @@ function Choose-ADOrganizationalUnit
 				$buttonOKDomain.PerformClick()
 			}
 		}
+
+        $buttonChangeForest_Click={
+            $Refresh = $false
+            New-Variable -Name ChangeForest -Value (Change-Forest) -Scope 1 -Force
+            If ($ChangeForest.Forest)
+            {
+                $forest = $ChangeForest.Forest
+                $Refresh = $true
+            }
+            If ($ChangeForest.Credential)
+            {
+                $Credential = $ChangeForest.Credential
+                $Refresh = $true
+            }
+            If ($Refresh)
+            {
+                $TreeviewForest.Nodes.Clear()
+                $TreeviewForest.Refresh()
+                & $FormEvent_Shown
+            }
+	    }
 	
 		#endregion Events
 	
@@ -302,6 +354,7 @@ function Choose-ADOrganizationalUnit
 		$formBrowseForDomain.Controls.Add($TreeviewForest)
 		$formBrowseForDomain.Controls.Add($buttonCancelDomain)
 		$formBrowseForDomain.Controls.Add($buttonOKDomain)
+		$formBrowseForDomain.Controls.Add($buttonChangeForest)
 		$formBrowseForDomain.AcceptButton = $buttonOKDomain
 		$formBrowseForDomain.CancelButton = $buttonCancelDomain
 		$formBrowseForDomain.ClientSize = '284, 279'
@@ -352,6 +405,18 @@ function Choose-ADOrganizationalUnit
 		$buttonOKDomain.TabIndex = 0
 		$buttonOKDomain.Text = "&OK"
 		$buttonOKDomain.UseVisualStyleBackColor = $True
+        #
+		# buttonChangeForest
+		#
+		$buttonChangeForest.Anchor = 'Bottom, Left'
+		#$buttonChangeForest.DialogResult = 'OK'
+		$buttonChangeForest.Location = '13, 244'
+		$buttonChangeForest.Name = "buttonChangeForest"
+		$buttonChangeForest.Size = '91, 23'
+		$buttonChangeForest.TabIndex = 0
+		$buttonChangeForest.Text = "Change &Forest"
+		$buttonChangeForest.UseVisualStyleBackColor = $True
+        $buttonChangeForest.add_Click($buttonChangeForest_Click)
 		#endregion Form Code
 	
 		#Save the initial state of the form
@@ -363,10 +428,220 @@ function Choose-ADOrganizationalUnit
 		#Show the Form
 		IF ($formBrowseForDomain.ShowDialog() -eq 'OK')
 	    {
-	        $TreeviewForest.SelectedNode.Name
+	        If ($ChangeForest)
+            {
+                $Props = @{
+                    MemberType = 'NoteProperty'
+                    Name = 'NewDomainDN'
+                    Value = $TreeviewForest.SelectedNode.Name
+                }
+                $ChangeForest | Add-Member @Props -PassThru
+            }
+            else
+            {
+                [pscustomobject]@{
+                    NewDomainDN = $TreeviewForest.SelectedNode.Name
+                }
+            }
+	    }
+	}
+    
+    function Change-Forest 
+    {
+	    [System.Windows.Forms.Application]::EnableVisualStyles()
+	    $formChangeForest = New-Object 'System.Windows.Forms.Form'
+	    $CB_UseCred = New-Object 'System.Windows.Forms.CheckBox'
+	    $GB_Creds = New-Object 'System.Windows.Forms.GroupBox'
+	    $MTB_Password = New-Object 'System.Windows.Forms.MaskedTextBox'
+	    $TB_UserName = New-Object 'System.Windows.Forms.TextBox'
+	    $labelUsernamePassword = New-Object 'System.Windows.Forms.Label'
+	    $tb_DCName = New-Object 'System.Windows.Forms.TextBox'
+	    $labelDomainControllerFQDN = New-Object 'System.Windows.Forms.Label'
+	    $buttonOK = New-Object 'System.Windows.Forms.Button'
+	    $InitialFormWindowState = New-Object 'System.Windows.Forms.FormWindowState'
+
+	    $CB_UseCred_CheckedChanged={
+		    $GB_Creds.Enabled = $CB_UseCred.Checked
 	    }
 	
-	}
+	    $buttonOK_Click={
+		    $formChangeForest.Cursor = 'WaitCursor'	
+		    $ServerName = $tb_DCName.Text
+		    $UserName = $TB_UserName.Text
+		    $Password = $MTB_Password.Text
+		    try
+		    {
+			    $LDAPTest = Test-LDAPConnection -ComputerName $ServerName
+                If ($LDAPTest.Connected)
+                {
+                    Write-Verbose "Connection successful."
+                }
+                else
+                {
+                    throw "Unable to connect to server '$ServerName' on LDAP port 389."
+                }
+                If ($CB_UseCred.Checked)
+			    {
+				    $DomainEntry = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$ServerName",$UserName,$Password)
+                    $SecPwd = $Password | ConvertTo-SecureString -AsPlainText -Force
+                    $ForestCred = New-Object -typename System.Management.Automation.PSCredential -argumentlist $username, $SecPwd
+			    }
+			    else
+			    {
+				    $DomainEntry = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$ServerName")
+			    }
+			    If ($DomainEntry.Name -eq $null)
+			    {
+				    throw "Unable to connect to server '$ServerName'"
+			    }
+			    $DomainContext = New-Object System.DirectoryServices.ActiveDirectory.DirectoryContext("Domain", $DomainEntry.name)
+			    $Domain = [System.DirectoryServices.ActiveDirectory.Domain]::GetDomain($DomainContext)
+			    $ForestContext = New-Object System.DirectoryServices.ActiveDirectory.DirectoryContext("Forest", $domain.forest)
+			    $RemoteForest = [System.DirectoryServices.ActiveDirectory.Forest]::GetForest($ForestContext)
+                $Props = @{
+                    Server = $LDAPTest.IPAddress
+                }
+                If ($RemoteForest)
+                {
+                    $Props.Add('Forest',$RemoteForest)
+                }
+                If ($ForestCred)
+                {
+                    $Props.Add('Credential',$ForestCred)
+                }
+                New-Variable -Name ForestOutput -Scope 1 -Value ([pscustomobject]$Props)
+		    }
+		    catch
+		    {
+			    $Message = 'Connection failed! ' + $_.exception.message
+			    $ErrorMsg = [System.Windows.Forms.MessageBox]::Show($Message,"Connection failure",0,16)
+		    }
+		    $formChangeForest.Cursor = 'Default'
+	    }
+
+	    $Form_StateCorrection_Load={
+		    #Correct the initial state of the form to prevent the .Net maximized form issue
+		    $formChangeForest.WindowState = $InitialFormWindowState
+	    }
+	
+	    $Form_Cleanup_FormClosed={
+		    #Remove all event handlers from the controls
+		    try
+		    {
+			    $CB_UseCred.remove_CheckedChanged($CB_UseCred_CheckedChanged)
+			    $buttonOK.remove_Click($buttonOK_Click)
+			    $formChangeForest.remove_Load($Form_StateCorrection_Load)
+			    $formChangeForest.remove_FormClosed($Form_Cleanup_FormClosed)
+		    }
+		    catch [Exception]
+		    { }
+	    }
+
+	    # formChangeForest
+	    #
+	    $formChangeForest.Controls.Add($CB_UseCred)
+	    $formChangeForest.Controls.Add($GB_Creds)
+	    $formChangeForest.Controls.Add($tb_DCName)
+	    $formChangeForest.Controls.Add($labelDomainControllerFQDN)
+	    $formChangeForest.Controls.Add($buttonOK)
+	    $formChangeForest.AcceptButton = $buttonOK
+	    $formChangeForest.ClientSize = '253, 222'
+	    $formChangeForest.FormBorderStyle = 'FixedDialog'
+	    $formChangeForest.MaximizeBox = $False
+	    $formChangeForest.MinimizeBox = $False
+	    $formChangeForest.Name = "formChangeForest"
+	    $formChangeForest.StartPosition = 'CenterScreen'
+	    $formChangeForest.Text = "Change Forest"
+	    #
+	    # CB_UseCred
+	    #
+	    $CB_UseCred.Anchor = 'Bottom, Left'
+	    $CB_UseCred.Location = '13, 68'
+	    $CB_UseCred.Name = "CB_UseCred"
+	    $CB_UseCred.Size = '172, 24'
+	    $CB_UseCred.TabIndex = 3
+	    $CB_UseCred.Text = "Use alternate credentials"
+	    $CB_UseCred.UseVisualStyleBackColor = $True
+	    $CB_UseCred.add_CheckedChanged($CB_UseCred_CheckedChanged)
+	    #
+	    # GB_Creds
+	    #
+	    $GB_Creds.Controls.Add($MTB_Password)
+	    $GB_Creds.Controls.Add($TB_UserName)
+	    $GB_Creds.Controls.Add($labelUsernamePassword)
+	    $GB_Creds.Anchor = 'Left, Right'
+	    $GB_Creds.Enabled = $False
+	    $GB_Creds.Location = '13, 98'
+	    $GB_Creds.Name = "GB_Creds"
+	    $GB_Creds.Size = '227, 83'
+	    $GB_Creds.TabIndex = 4
+	    $GB_Creds.TabStop = $False
+	    $GB_Creds.Text = "Alternate credentials"
+	    #
+	    # MTB_Password
+	    #
+	    $MTB_Password.Location = '85, 47'
+	    $MTB_Password.Name = "MTB_Password"
+	    $MTB_Password.PasswordChar = '*'
+	    $MTB_Password.Size = '127, 20'
+	    $MTB_Password.TabIndex = 5
+	    #
+	    # TB_UserName
+	    #
+	    $TB_UserName.Location = '85, 20'
+	    $TB_UserName.Name = "TB_UserName"
+	    $TB_UserName.Size = '127, 20'
+	    $TB_UserName.TabIndex = 4
+	    #
+	    # labelUsernamePassword
+	    #
+	    $labelUsernamePassword.Location = '7, 20'
+	    $labelUsernamePassword.Name = "labelUsernamePassword"
+	    $labelUsernamePassword.Size = '71, 52'
+	    $labelUsernamePassword.TabIndex = 0
+	    $labelUsernamePassword.Text = "Username
+
+Password"
+	    #
+	    # tb_DCName
+	    #
+	    $tb_DCName.Location = '13, 37'
+	    $tb_DCName.Name = "tb_DCName"
+	    $tb_DCName.Size = '227, 20'
+	    $tb_DCName.TabIndex = 2
+	    #
+	    # labelDomainControllerFQDN
+	    #
+	    $labelDomainControllerFQDN.Location = '13, 13'
+	    $labelDomainControllerFQDN.Name = "labelDomainControllerFQDN"
+	    $labelDomainControllerFQDN.Size = '227, 16'
+	    $labelDomainControllerFQDN.TabIndex = 1
+	    $labelDomainControllerFQDN.Text = "Domain Controller (FQDN or IP address):"
+	    #
+	    # buttonOK
+	    #
+	    $buttonOK.Anchor = 'Bottom, Right'
+	    $buttonOK.DialogResult = 'OK'
+	    $buttonOK.Location = '166, 187'
+	    $buttonOK.Name = "buttonOK"
+	    $buttonOK.Size = '75, 23'
+	    $buttonOK.TabIndex = 6
+	    $buttonOK.Text = "&OK"
+	    $buttonOK.UseVisualStyleBackColor = $True
+	    $buttonOK.add_Click($buttonOK_Click)
+
+	    #Save the initial state of the form
+	    $InitialFormWindowState = $formChangeForest.WindowState
+	    #Init the OnLoad event to correct the initial state of the form
+	    $formChangeForest.add_Load($Form_StateCorrection_Load)
+	    #Clean up the control events
+	    $formChangeForest.add_FormClosed($Form_Cleanup_FormClosed)
+	    #Show the Form
+	    If ($formChangeForest.ShowDialog() -eq 'OK')
+        {
+            $ForestOutput
+        }
+    }
 
     #endregion Functions
 	
@@ -453,7 +728,16 @@ function Choose-ADOrganizationalUnit
 			$Credential = Get-Credential $Credential -Message "Please enter credentials to connect to domain '$Domain'"
 			try
 			{
-                $DomainIP = (Test-Connection $Domain -Count 1 -ea 0).IPV4Address.IPAddressToString
+                $LDAPTest = Test-LDAPConnection -ComputerName $Domain
+                If ($LDAPTest.Connected)
+                {
+	                Write-Verbose "Connection successful."
+                }
+                else
+                {
+	                throw "Unable to connect to '$Domain' on LDAP port 389."
+                }
+                $DomainIP = $LDAPTest.IPAddress
 				$root = New-Object -TypeName System.DirectoryServices.DirectoryEntry("LDAP://$DomainIP",$Credential.UserName,$Credential.GetNetworkCredential().password)
                 New-Variable -Name DomainIP -Value $DomainIP -Scope 1
 			}
@@ -487,14 +771,6 @@ function Choose-ADOrganizationalUnit
 			$Treeview.CheckBoxes = $true
 		}
         $cb_AdvancedFeatures.Checked = $AdvancedFeatures
-        If ($forest.Domains.Count -gt 1)
-	    {
-		    $changeDomainToolStripMenuItem.Enabled = $true
-	    }
-	    else
-	    {
-		    $changeDomainToolStripMenuItem.Enabled = $false
-	    }
 	}
 	
 	$CreateOU=[System.Windows.Forms.NodeLabelEditEventHandler]{
@@ -638,14 +914,34 @@ function Choose-ADOrganizationalUnit
 	
 	$changeDomainToolStripMenuItem_Click={
 		#call Change Domain form
-		$NewDomainDN = ChangeDomain
-		If ($NewDomainDN)
+        $Refresh = $false
+		$ChangeDomain = Change-Domain
+		If ($ChangeDomain.NewDomainDN)
 		{
-			New-Variable -Name DomainDN -Value $NewDomainDN -Scope 1 -Force
-			$Treeview.Nodes[0].Nodes.Clear()
-			$Treeview.Refresh()
-			Build-TreeView
+			New-Variable -Name DomainDN -Value $ChangeDomain.NewDomainDN -Scope 1 -Force
+			$Refresh = $true
 		}
+        else
+        {
+            return
+        }
+        If ($ChangeDomain.Forest)
+        {
+            Set-Variable -Name Forest -Value $ChangeDomain.forest -Scope 1 -Force
+            New-Variable -Name DomainIP -Value $ChangeDomain.server -Scope 1 -Force
+			$Refresh = $true
+        }
+        If ($ChangeDomain.Credential)
+        {
+            Set-Variable -Name Credential -Value $ChangeDomain.Credential -Scope 1 -Force
+			$Refresh = $true
+        }
+        If ($Refresh)
+        {
+            $Treeview.Nodes[0].Nodes.Clear()
+		    $Treeview.Refresh()
+		    Build-TreeView
+        }
 	}
 	
 	$newOUToolStripMenuItem_Click={
