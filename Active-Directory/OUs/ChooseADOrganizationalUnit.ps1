@@ -39,6 +39,7 @@
 
    *  Change domain option in context menu disabled when only one domain is detected.
    *  Fixed an issue with domains starting with a 'D'
+   *  Added a Change Farm button to the Change Domain GUI. 
 
    Special thanks to @danSpotter for bringing these issues to light!
 .LINK
