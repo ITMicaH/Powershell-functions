@@ -3,7 +3,7 @@
    Create multiple outlook contacts using a CSV file
 
 .DESCRIPTION
-   This Powershell script will allow you to create outlook contacts using a csv file as input.
+   This Powershell function will allow you to create outlook contacts using a csv file as input.
    The csv has to contain headers that match the properties for the contact objects.
 
 .PARAMETER FilePath
@@ -20,22 +20,14 @@
    .\Import-OutlookContacts.ps1 -FilePath "C:\Users\Pete\Documents\Contacts.csv"
 
    This will create Outlook contacts based on the Contacts.csv file.
-
-.EXAMPLE
-   .\Import-OutlookContacts.ps1 -FilePath "C:\Users\Duncan\Documents\Contacts.csv"
-
-   This will create Outlook content based on the Contacts.csv file.
-
 .EXAMPLE
    .\Import-OutlookContacts.ps1 -ListAvailableHeaders
 
    This will generate a list of possible headers to use for your csv file.
-
 .EXAMPLE
-   .\Import-OutlookContacts.ps1 -GenerateEmptyCSV "C:\Users\Ryan\Documents\Contacts.csv"
+   .\Import-OutlookContacts.ps1 -GenerateEmptyCSV -FilePath "C:\Users\Ryan\Documents\Contacts.csv"
 
    This will create an empty CSV file with all possible headers.
-
 .LINK
    http://itmicah.wordpress.com
 #>
