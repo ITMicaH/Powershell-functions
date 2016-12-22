@@ -4,7 +4,7 @@
 .DESCRIPTION
     Uses remote registry to query installed software on a local or remote computer.
 .PARAMETER ComputerName
-    Name of the computer to query software on. Wildcards are allowed.
+    Name of the computer to query software on.
 .PARAMETER DisplayName
     Displayname of the software package. Wildcards are allowed.
 .PARAMETER Publisher
