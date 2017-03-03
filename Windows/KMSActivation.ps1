@@ -35,8 +35,7 @@
     .\Activate-KMSClient -AutoDetectKey
     This will search the local computer's domain for a KMS host and, when found, activate your windows OS using the client key retreived from internet.
 .LINK
-http://itmicah.wordpress.com/
-
+    https://itmicah.wordpress.com/2013/12/20/auto-activate-a-non-domain-joined-windows-os-using-powershell-and-kms/
 #>
 function Activate-KMSClient
 {
