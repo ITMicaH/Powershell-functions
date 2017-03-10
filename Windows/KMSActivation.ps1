@@ -166,7 +166,7 @@ function Activate-KMSClient
 
     If (!$Domain -and (Get-WmiObject Win32_ComputerSystem).PartOfDomain)
     {
-        $Domain = $env:USERDNSDOMAIN
+        $Domain = (Get-WmiObject Win32_ComputerSystem).Domain
     }
     If (!$Domain -and !(Get-WmiObject Win32_ComputerSystem).PartOfDomain)
     {
