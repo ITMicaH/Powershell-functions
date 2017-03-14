@@ -5,6 +5,11 @@ Uses the oDATA API to query information on a Citrix XenApp/XenDesktop environmen
 Output objects are supplied with ScriptMethods which allow you to navigate directly to
 related information objects (entities).
 
+## ChangeLog
+07-07-2016 : v1.0
+14-03-2017 : Added Filter parameter and removed Date (dynamic) parameter.
+
+## Examples
 EXAMPLE:
 
 `PS\> $User = Get-CitrixODATAInformation -Server SVR-CDC-001 -Type User -Name TestUser01 -Credential CONTOSO\CTXAdmin`
@@ -20,6 +25,18 @@ Retreives all sessions initiated by the user of the previous example.
 
 EXAMPLE:
 
-`PS\> $UsedClients = $UserSessions[0..4].GetConnections($true).ClientName`
+`PS\> $UsedClients = $UserSessions[0..4].GetConnections().ClientName`
 
-Retreives names of all the clients the user of the previous example has run his/hers first five sessions on and shows verbose information.
+Retreives names of all the clients the user of the previous example has run his/hers first five sessions on.
+
+EXAMPLE:
+
+`PS\> $UserSessions = $User.GetSessions("ConnectionState -ne 'Terminated'")`
+
+Retreives sessions initiated by the user of the previous example where the ConnectionState property does not have a value of 'Terminated'.
+
+EXAMPLE:
+
+`PS\> Get-CitrixODATAInformation -Server SVR-CDC-001 -Type Session -Filter "StartDate -gt $((Get-Date).AddDays(-1))"`
+
+Retreives all sessions started in the last day.
