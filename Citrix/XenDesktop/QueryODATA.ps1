@@ -4,8 +4,7 @@
 .DESCRIPTION
    Uses the oDATA API to query information on a Citrix XenApp/XenDesktop environment.
    Output objects are supplied with ScriptMethods which allow you to navigate directly to
-   related information objects (entities). The ScriptMethods can display verbose information
-   by setting the input parameter to $true (example 6).
+   related information objects (entities).
 .PARAMETER Server
    The name of the Citrix server (Director) you want to use.
 .PARAMETER Type
@@ -17,6 +16,9 @@
 .PARAMETER CustomURL
    Customized secundary URL section. The secundary URL section is the part of the URL that follows Data\.
    This parameter is mainly used for the ScriptMethods on the output object.
+.PARAMETER Filter
+   This parameter will allow you to filter the results based on one or more properties of an output object.
+   You can also apply a filter to a method (see examples).
 .PARAMETER UseTLS
    Switch parameter if you want to use TLS (https).
 .PARAMETER UseV1
@@ -29,9 +31,15 @@
    $UserSessions = $User.GetSessions()
    Retreives all sessions initiated by the user of the previous example.
 .EXAMPLE
-   $UsedClients = $UserSessions[0..4].GetConnections($true).ClientName
-   Retreives names of all the clients the user of the previous example has run his/hers first five sessions on 
-   and shows verbose information.
+   $UserSessions = $User.GetSessions("ConnectionState -ne 'Terminated'")
+   Retreives sessions initiated by the user of the previous example where the ConnectionState property
+   does not have a value of 'Terminated'.
+.EXAMPLE
+   Get-CitrixODATAInformation -Server SVR-CDC-001 -Type Session -Filter "StartDate -gt $((Get-Date).AddDays(-1))"
+   Retreives all sessions started in the last day.
+.EXAMPLE
+   $UsedClients = $UserSessions[0..4].GetConnections().ClientName
+   Retreives names of all the clients the user of the previous example has run his/hers first five sessions on.
 .EXAMPLE
    $Machine = Get-CitrixODATAInformation -Server SVR-CDC-001 -Type Machine -Name VDI001
    PS C:\>$Machine.GetMachineHotfixLogs().GetHotfix()
@@ -42,11 +50,15 @@
    $DesktopGroup = Get-CitrixODATAInformation -Server SVR-CDC-001 -Type DesktopGroup -Name 'My VDI'
    Retreives information on Desktop Group 'My VDI'.
 .EXAMPLE
-   $DesktopGroup.GetMachines($true)
-   Retreives machines in the Desktop Group and displays verbose information.
+   $DesktopGroup.GetMachines()
+   Retreives machines in the Desktop Group.
 .NOTES
    Author : Michaja van der Zouwen
    Date   : 7-7-2016
+   
+   ChangeLog:
+   ==========
+   14-03-2017 : Added Filter parameter and removed Date (dynamic) parameter.
 #>
 function Get-CitrixODATAInformation
 {
@@ -59,24 +71,22 @@ function Get-CitrixODATAInformation
                    HelpMessage = 'Please enter the name of a Citrix (Director) server',
                    Position=0)]
         [Parameter(Mandatory=$true,
-                   ParameterSetName = 'CustomURL',
-                   Position=0)]
+                   ParameterSetName = 'CustomURL')]
         [string]
         $Server,
 
         # Type of data to query
         [Parameter(Mandatory=$true,
                    ParameterSetName = 'Type',
-                   HelpMessage = "Please enter the type of data you'd like to query",
-                   Position=1)]
-        [ValidateSet('User','Machine','DesktopGroup','Catalog')]
+                   HelpMessage = "Please enter the type of data to query")]
+        [ValidateSet('User','Machine','DesktopGroup','Catalog','Session')]
         [string]
         $Type,
 
         # Name to filter on
         [Parameter(Mandatory=$false,
-                   ParameterSetName = 'Type',
-                   Position=2)]
+                   ValueFromPipeline=$true,
+                   ParameterSetName = 'Type')]
         [string]
         $Name,
 
@@ -88,6 +98,12 @@ function Get-CitrixODATAInformation
                    ParameterSetName = 'CustomURL')]
         [string]
         $CustomURL,
+
+        # Filter on specific properties
+        [Parameter(Mandatory=$false)]
+        [AllowNull()]
+        [string]
+        $Filter,
 
         # Use https instead of http
         [switch]
@@ -103,26 +119,27 @@ function Get-CitrixODATAInformation
         $Params = @{
             Uri = ''
         }
-        If ($Credential)
+        If ($PSBoundParameters.ContainsKey('Credential'))
         {
-            If ($Credential -match '(.+);(\w+)')
+            If ($Credential -match '(?<UserName>.+);(?<Password>\w+)')
             {
-                $Password = $Matches[2] | ConvertTo-SecureString
-                $Credential = [System.Management.Automation.PSCredential]::new($Matches[1],$Password)
+                $Password = $Matches.Password | ConvertTo-SecureString
+                $Credential = [System.Management.Automation.PSCredential]::new($Matches.UserName,$Password)
             }
             elseif ($Credential -isnot [PSCredential])
             {
                 $Credential = Get-Credential $Credential -Message "Please provide credentials for oData connection"
+                If (!$Credential)
+                {
+                    return
+                }
             }
-            $Params.Add('Credential',$Credential)
+            $Params['Credential'] = $Credential
         }
         else
         {
-            $Params.Add('UseDefaultCredentials',$True)
+            $Params['UseDefaultCredentials'] = $True
         }
-    }
-    Process
-    {
         switch ($UseTLS)
         {
             $true  {$Prefix = 'https'}
@@ -133,32 +150,124 @@ function Get-CitrixODATAInformation
             $true  {$Version = 'v1'}
             $False {$Version = 'v2'}
         }
-        Write-Verbose "Using '$Prefix'."
+        Write-Verbose "Using '$Prefix' and '$Version'."
         $BaseURL = "$Prefix`://$Server/Citrix/Monitor/OData/$Version/Data"
         Write-Verbose 'Retreiving all enumeration values...'
         $MethodURL = "$Prefix`://$Server/Citrix/Monitor/OData/$Version/Methods"
         $Params.Uri = "$MethodURL/GetAllMonitoringEnums()"
         $Enums = Invoke-RestMethod @Params -Verbose:$VerbosePreference
-        If ($Name)
+        
+        function Enumerate ($Type,$Value)
+        {
+            $EnumParams = @{}
+            If ($Params.Credential)
+            {
+                $EnumParams['Credential'] = $Credential
+            }
+            else
+            {
+                $EnumParams['UseDefaultCredentials'] = $True
+            }
+            $EnumType = $Enums.content.properties.typename -match $Type
+            If (!$EnumType)
+            {
+                $EnumType = $Enums.content.properties.typename | where {$Type -match $_}
+            }
+            If ($EnumType)
+            {
+                Write-Verbose "`tEnumerating value for property '$($Type)'..."
+                $EnumParams['Uri'] = "$MethodURL/GetAllMonitoringEnums('$EnumType')/Values"
+                $EnumValues = Invoke-RestMethod @EnumParams -Verbose:$False
+                If ($Value -match '^\d{1,2}$')
+                {
+                    $EnumValues[$Value].content.properties.Name
+                }
+                else
+                {
+                    $EnumValue = $EnumValues | where {$_.content.properties.Name -eq $Value}
+                    If ($EnumValue)
+                    {
+                        $EnumValue.content.properties.Value.InnerText
+                    }
+                    else
+                    {
+                        Write-Verbose "Unable to find value '$Value' for type '$Type'."
+                        $Value
+                    }
+                }
+            }
+            else
+            {
+                Write-Verbose "Unable to find enumeration type '$Type'."
+                $Value
+            }
+        }
+    }
+    Process
+    {
+        If ($PSBoundParameters.ContainsKey('Credential'))
+        {
+            If (!$Credential)
+            {
+                return "Cancelled by user."
+            }
+        }
+        If ($PSBoundParameters.ContainsKey('Name'))
         {
             Switch ($Type)
             {
-                'User'    {$Filter = "?`$filter=UserName eq '$Name'"}
-                'Machine' {$Filter = "?`$filter=HostedMachineName eq '$Name'"}
-                default   {$Filter = "?`$filter=Name eq '$Name'"}
+                'User'    {$URLFilter = "?`$filter=UserName eq '$Name'"}
+                'Machine' {$URLFilter = "?`$filter=HostedMachineName eq '$Name'"}
+                'Session'{throw "Parameter 'Name' can't be used for type 'Sessions'."}
+                default   {$URLFilter = "?`$filter=Name eq '$Name'"}
             }
         }
-        If ($CustomURL)
+        If ($PSBoundParameters.ContainsKey('CustomURL'))
         {
+            Write-Verbose "Using Custom URL '$CustomURL'."
             $ObjectType = ($CustomURL.Split('/')[-1]).TrimEnd('s')
             $Params['Uri'] = "$BaseURL/$CustomURL"
         }
         else
         {
             $ObjectType = $Type
-            $Params['Uri'] = "$BaseURL/$Type`s()$Filter"
+            $Params['Uri'] = "$BaseURL/$Type`s()$URLFilter"
         }
-
+        If ($PSBoundParameters.ContainsKey('Filter') -and $Filter -ne '')
+        {
+            Write-Verbose "Processing filter '$Filter'."
+            If ($Filter -match '\(|\.')
+            {
+                Write-Warning "Filter might contain non-string elements."
+            }
+            $Filter = $Filter.Replace('-','')
+            foreach ($Item in ($Filter -split 'and|or').Trim())
+            {
+                $EnumerationType = $Item.Split(' ')[0]
+                $ValueToEnumerate = $Item.Split(' ')[2..($Item.Split(' ').Count-1)] -join ' '
+                try{
+                    $Date = Get-Date ([datetime]$ValueToEnumerate.Trim("'")).ToUniversalTime() -Format s
+                    Write-Verbose 'Filter contains a date.'
+                    $Enumerated = "DateTime'$Date'"
+                }
+                catch{
+                    $Enumerated = Enumerate $EnumerationType $ValueToEnumerate.Trim("'")
+                }
+                If ($Enumerated -ne $ValueToEnumerate.Trim("'"))
+                {
+                    $Filter = $Filter -replace $ValueToEnumerate,$Enumerated
+                }
+            }
+            
+            If ($Params.Uri -match 'filter=')
+            {
+                $Params['Uri'] = $Params['Uri'] + " and $Filter"
+            }
+            else
+            {
+                $Params['Uri'] = $Params['Uri'] + "?`$filter=$Filter"
+            }
+        }
         Write-Verbose "Querying oDATA information..."
         try
         {
@@ -209,18 +318,8 @@ function Get-CitrixODATAInformation
                     }
                     If ($MemberParams.Value -match '^\d{1,2}$')
                     {
-                        $EnumType = $Enums.content.properties.typename -match $Member.Name
-                        If (!$EnumType)
-                        {
-                            $EnumType = $Enums.content.properties.typename | ?{$Member.Name -match $_}
-                        }
-                        If ($EnumType)
-                        {
-                            Write-Verbose "`tEnumerating value for property '$($Member.Name)'..."
-                            $Params.Uri = "$MethodURL/GetAllMonitoringEnums('$EnumType')/Values"
-                            $EnumValues = Invoke-RestMethod @Params -Verbose:$False
-                            $MemberParams.Value = $EnumValues[$MemberParams.Value].content.properties.Name
-                        }
+                        Write-Verbose "`tEnumerating value for property '$($Member.Name)'..."
+                        $MemberParams.Value = Enumerate $Member.Name $MemberParams.Value
                     }
                     Write-Verbose "`tAdding property '$($Member.Name)'..."
                     Add-Member @MemberParams -Verbose:$VerbosePreference
@@ -237,11 +336,11 @@ function Get-CitrixODATAInformation
                         If ($Credential)
                         {
                             $CredString = "$($Credential.UserName);$($Credential.Password | ConvertFrom-SecureString)"
-                            $Command = "Param([bool]`$Verbose);Get-CitrixODATAInformation -Server $Server -CustomURL `"$($Link.href)`" -Credential '$CredString' -UseTLS:`$$UseTLS -UseV1:`$$UseV1 -Verbose:`$Verbose"
+                            $Command = "Param([string]`$Filter);Get-CitrixODATAInformation -Server $Server -CustomURL `"$($Link.href)`" -Filter `$Filter -Credential '$CredString' -UseTLS:`$$UseTLS -UseV1:`$$UseV1"
                         }
                         else
                         {
-                            $Command = "Param([bool]`$Verbose);Get-CitrixODATAInformation -Server $Server -CustomURL `"$($Link.href)`" -UseTLS:`$$UseTLS -UseV1:`$$UseV1 -Verbose:`$Verbose"
+                            $Command = "Param([string]`$Filter);Get-CitrixODATAInformation -Server $Server -CustomURL `"$($Link.href)`" -Filter `$Filter -UseTLS:`$$UseTLS -UseV1:`$$UseV1"
                         }
                         $ScriptBlock = [Scriptblock]::Create($Command)
 
