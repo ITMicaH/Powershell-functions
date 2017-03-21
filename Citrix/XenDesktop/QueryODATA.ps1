@@ -124,7 +124,7 @@ function Get-CitrixODATAInformation
             If ($Credential -match '(?<UserName>.+);(?<Password>\w+)')
             {
                 $Password = $Matches.Password | ConvertTo-SecureString
-                $Credential = [System.Management.Automation.PSCredential]::new($Matches.UserName,$Password)
+                $Credential = New-Object -typename System.Management.Automation.PSCredential -argumentlist $Matches.UserName,$Password
             }
             elseif ($Credential -isnot [PSCredential])
             {
