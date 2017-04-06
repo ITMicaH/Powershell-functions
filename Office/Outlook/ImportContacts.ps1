@@ -12,15 +12,15 @@
 .PARAMETER GenerateEmptyCSV
    This will generate an empty CSV file with all the possible headers.
 .EXAMPLE
-   .\Import-OutlookContacts.ps1 -FilePath "C:\Users\Pete\Documents\Contacts.csv"
+   Import-OutlookContacts -FilePath "C:\Users\Pete\Documents\Contacts.csv"
 
    This will create Outlook contacts based on the Contacts.csv file.
 .EXAMPLE
-   .\Import-OutlookContacts.ps1 -ListAvailableHeaders
+   Import-OutlookContacts -ListAvailableHeaders
 
    This will generate a list of possible headers to use for your csv file.
 .EXAMPLE
-   .\Import-OutlookContacts.ps1 -GenerateEmptyCSV -FilePath "C:\Users\Ryan\Documents\Contacts.csv"
+   Import-OutlookContacts -GenerateEmptyCSV -FilePath "C:\Users\Ryan\Documents\Contacts.csv"
 
    This will create an empty CSV file with all possible headers.
 .LINK
