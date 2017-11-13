@@ -4,17 +4,14 @@
 .DESCRIPTION
    This Powershell function will allow you to create outlook contacts using a csv file as input.
    The csv has to contain headers that match the properties for the contact objects.
-.PARAMETER FilePath
-   This is the path to the CSV file containing the contact you wish to add.
-   (see description for details)
-.PARAMETER ListPossibleHeaders
-   This will generate a list of possible headers to use for your csv file.
-.PARAMETER GenerateEmptyCSV
-   This will generate an empty CSV file with all the possible headers.
 .EXAMPLE
    Import-OutlookContacts -FilePath "C:\Users\Pete\Documents\Contacts.csv"
 
    This will create Outlook contacts based on the Contacts.csv file.
+.EXAMPLE
+   Import-OutlookContacts -FilePath "C:\Users\Pete\Documents\Contacts.csv" -SubFolder NewContacts\Test
+
+   This will create Outlook contacts based on the Contacts.csv file in the subfolder NewContacts\Test
 .EXAMPLE
    Import-OutlookContacts -ListAvailableHeaders
 
@@ -38,6 +35,12 @@ function Import-OutlookContacts
         [string]
         $FilePath,
 
+        # Existing subfolder for saving contacts
+        [Parameter(Mandatory=$false,
+                   ParameterSetName='Default')]
+        [string]
+        $SubFolder,
+
         # Create an empty CSV
         [Parameter(ParameterSetName='Default')]
         [switch]
@@ -53,9 +56,9 @@ function Import-OutlookContacts
 
     function Add-Contact 
     {
-        param ($user,$properties)
+        param ($folder,$user,$properties)
 
-        $newcontact = $contacts.Items.Add()
+        $newcontact = $folder.Items.Add()
 
         Foreach ($property in $properties){
             IF ($user.$property) {
@@ -79,9 +82,31 @@ function Import-OutlookContacts
 
     # Open Outlook and get contactlist
     $outlook = new-object -com Outlook.Application -ea 1
-    $contacts = $outlook.session.GetDefaultFolder(10)
+    
 
-    If (!$contacts) {
+    If ($contacts = $outlook.session.GetDefaultFolder(10)) 
+    {
+        If ($PSBoundParameters['SubFolder'])
+        {
+            $Folder = $contacts
+            $SubFolder.Split('\').ForEach({
+                try
+                {
+                    $Folder = $Folder.Folders.Item($_)
+                }
+                catch
+                {
+                    throw "Path [$SubFolder] is incorrect."
+                }
+            })
+        }
+        else
+        {
+            $Folder = $contacts
+        }
+    }
+    else
+    {
         throw 'Unable to get addressbook information'
     }
 
@@ -106,8 +131,11 @@ function Import-OutlookContacts
     $csv = Import-Csv $FilePath -UseCulture
 
     # Add contacts
-    foreach ($user in $csv) {
-        Add-Contact $user $properties
+    for ($i = 0; $i -lt $csv.count; $i++)
+    { 
+        [int]$Completion = $i/$csv.count*100
+        Write-Progress -Activity "Adding contacts to outlook" -Status "$Completion% complete" -PercentComplete $Completion
+        Add-Contact $folder $csv[$i] $properties
     }
     #endregion Main Script
 }
