@@ -11,7 +11,7 @@
 .EXAMPLE
    Import-OutlookContacts -FilePath "C:\Users\Pete\Documents\Contacts.csv" -SubFolder NewContacts\Test
 
-   This will create Outlook contacts based on the Contacts.csv file in the subfolder NewContacts\Test
+   This will create Outlook contacts based on the Contacts.csv file in the existing subfolder NewContacts\Test
 .EXAMPLE
    Import-OutlookContacts -ListAvailableHeaders
 
