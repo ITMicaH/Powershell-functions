@@ -11,6 +11,12 @@ This will create Outlook contacts based on the Contacts.csv file.
 
 EXAMPLE:
 
+`PS\> Import-OutlookContacts.ps1 -FilePath "C:\Users\Pete\Documents\Contacts.csv" -SubFolder NewContacts\Test`
+
+This will create Outlook contacts based on the Contacts.csv file in the existing subfolder NewContacts\Test.
+
+EXAMPLE:
+
 `PS\> Import-OutlookContacts.ps1 -ListAvailableHeaders`
 
 This will generate a list of possible headers to use for your csv file.
