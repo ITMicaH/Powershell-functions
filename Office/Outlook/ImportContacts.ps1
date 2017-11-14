@@ -11,7 +11,7 @@
 .EXAMPLE
    Import-OutlookContacts -FilePath "C:\Users\Pete\Documents\Contacts.csv" -SubFolder NewContacts\Test
 
-   This will create Outlook contacts based on the Contacts.csv file in the existing subfolder NewContacts\Test
+   This will create Outlook contacts based on the Contacts.csv file in the subfolder NewContacts\Test.
 .EXAMPLE
    Import-OutlookContacts -ListAvailableHeaders
 
@@ -89,16 +89,17 @@ function Import-OutlookContacts
         If ($PSBoundParameters['SubFolder'])
         {
             $Folder = $contacts
-            $SubFolder.Split('\').ForEach({
+            ForEach ($Item in $SubFolder.Split('\'))
+            {
                 try
                 {
-                    $Folder = $Folder.Folders.Item($_)
+                    $Folder = $Folder.Folders.Item($Item)
                 }
                 catch
                 {
-                    throw "Path [$SubFolder] is incorrect."
+                    throw "Path [$SubFolder] is incorrect. Folder [$Item] is not present."
                 }
-            })
+            }
         }
         else
         {
