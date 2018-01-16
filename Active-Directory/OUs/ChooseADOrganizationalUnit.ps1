@@ -772,7 +772,7 @@ Password"
 			$Treeview.CheckBoxes = $true
 		}
         $cb_AdvancedFeatures.Checked = $AdvancedFeatures
-	$ADSearcher.PropertiesToLoad.AddRange(@('name','distinguishedname'))
+	$ADSearcher.PropertiesToLoad.AddRange(@('name','distinguishedname','objectClass'))
 	}
 	
 	$CreateOU=[System.Windows.Forms.NodeLabelEditEventHandler]{
