@@ -43,7 +43,7 @@ Retreives all sessions started in the last day.
 
 # UpdateMachineId.ps1
 ## Functions
-### Get-CitrixODATAInformation
+### Update-HostedMachineId
 Machines in Desktop Studio or Desktop Director display a Power State of 'Unknown'.
 This can be caused by changes made on the hypervisor to VM metadata. If the VM's 
 unique ID has changed then the XenDesktop database may be unaware of this UID mismatch.
