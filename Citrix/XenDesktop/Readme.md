@@ -40,3 +40,28 @@ EXAMPLE:
 `PS\> Get-CitrixODATAInformation -Server SVR-CDC-001 -Type Session -Filter "StartDate -gt $((Get-Date).AddDays(-1))"`
 
 Retreives all sessions started in the last day.
+
+### Get-CitrixODATAInformation
+Machines in Desktop Studio or Desktop Director display a Power State of 'Unknown'.
+This can be caused by changes made on the hypervisor to VM metadata. If the VM's 
+unique ID has changed then the XenDesktop database may be unaware of this UID mismatch.
+This function will verify the UID known to XenDesktop for the VMs and compare against
+the UID provided by the hypervisor. If there's a mismatch the ID will be updated 
+in the database.
+
+## ChangeLog
+29-06-2018 : v1.0
+
+## Examples
+
+EXAMPLE:
+    
+`PS\>Get-BrokerMachine -PowerState Unknown | Update-HostedMachineId
+    
+Repair Machine IDs using local Delivery Controller.
+    
+EXAMPLE:
+
+`PS\>Get-BrokerMachine -PowerState Unknown | Update-HostedMachineId -Controller srv-cdc-001 -Restart
+    
+Repair Machine IDs using Delivery Controller srv-cdc-001 and restart the repaired VMs.
