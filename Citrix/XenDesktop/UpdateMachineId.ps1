@@ -10,20 +10,21 @@
    in the database.
 .EXAMPLE
    Get-BrokerMachine -PowerState Unknown | Update-HostedMachineId
-   Repair Machine IDs using local Delivery Controller.
+   Update Machine IDs using local Delivery Controller.
 .EXAMPLE
    Get-BrokerMachine -PowerState Unknown | Update-HostedMachineId -Controller srv-cdc-001 -Restart
-   Repair Machine IDs using Delivery Controller srv-cdc-001 and restart the repaired VMs.
+   Update Machine IDs using Delivery Controller srv-cdc-001 and restart the updated VMs.
 .NOTES
    Author : Michaja van der Zouwen
-.LINKS
+.LINK
    https://support.citrix.com/article/CTX131267#Solution%201
+   https://github.com/ITMicaH/Powershell-functions/blob/master/Citrix/XenDesktop/Readme.md#updatemachineidps1
 #>
 function Update-HostedMachineId
 {
     [CmdletBinding(SupportsShouldProcess=$true, 
                   PositionalBinding=$false,
-                  HelpUri = 'https://itmicah.wordpress.com/',
+                  HelpUri = 'https://github.com/ITMicaH/Powershell-functions/blob/master/Citrix/XenDesktop/Readme.md#updatemachineidps1',
                   ConfirmImpact='Medium')]
     Param
     (
