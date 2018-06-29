@@ -66,4 +66,4 @@ EXAMPLE:
 
 `PS\> Get-BrokerMachine -PowerState Unknown | Update-HostedMachineId -Controller srv-cdc-001 -Restart`
     
-Update Machine IDs using Delivery Controller srv-cdc-001 and restart the repaired VMs.
+Update Machine IDs using Delivery Controller srv-cdc-001 and restart the updated VMs.
