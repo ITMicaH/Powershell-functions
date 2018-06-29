@@ -58,12 +58,12 @@ in the database.
 
 EXAMPLE:
     
-`PS\>Get-BrokerMachine -PowerState Unknown | Update-HostedMachineId`
+`PS\> Get-BrokerMachine -PowerState Unknown | Update-HostedMachineId`
     
-Repair Machine IDs using local Delivery Controller.
+Update Machine IDs using local Delivery Controller.
     
 EXAMPLE:
 
-`PS\>Get-BrokerMachine -PowerState Unknown | Update-HostedMachineId -Controller srv-cdc-001 -Restart`
+`PS\> Get-BrokerMachine -PowerState Unknown | Update-HostedMachineId -Controller srv-cdc-001 -Restart`
     
-Repair Machine IDs using Delivery Controller srv-cdc-001 and restart the repaired VMs.
+Update Machine IDs using Delivery Controller srv-cdc-001 and restart the repaired VMs.
