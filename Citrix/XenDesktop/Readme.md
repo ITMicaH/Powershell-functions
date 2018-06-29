@@ -41,6 +41,8 @@ EXAMPLE:
 
 Retreives all sessions started in the last day.
 
+# UpdateMachineId.ps1
+## Functions
 ### Get-CitrixODATAInformation
 Machines in Desktop Studio or Desktop Director display a Power State of 'Unknown'.
 This can be caused by changes made on the hypervisor to VM metadata. If the VM's 
@@ -56,12 +58,12 @@ in the database.
 
 EXAMPLE:
     
-`PS\>Get-BrokerMachine -PowerState Unknown | Update-HostedMachineId
+`PS\>Get-BrokerMachine -PowerState Unknown | Update-HostedMachineId`
     
 Repair Machine IDs using local Delivery Controller.
     
 EXAMPLE:
 
-`PS\>Get-BrokerMachine -PowerState Unknown | Update-HostedMachineId -Controller srv-cdc-001 -Restart
+`PS\>Get-BrokerMachine -PowerState Unknown | Update-HostedMachineId -Controller srv-cdc-001 -Restart`
     
 Repair Machine IDs using Delivery Controller srv-cdc-001 and restart the repaired VMs.
