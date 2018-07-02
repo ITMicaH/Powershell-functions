@@ -33,7 +33,10 @@ function Get-DutchFullName
                    ValueFromPipeline=$true,
                    Position=0)]
         [Microsoft.ActiveDirectory.Management.ADUser[]]
-        $ADUser
+        $ADUser,
+
+        [switch]
+        $SurnameOnly
     )
 
     Begin
@@ -68,22 +71,34 @@ function Get-DutchFullName
         {
             If ($User.Surname -and $User.GivenName)
             {
-                $String = $User.SurName -replace '\.|,',''
-                $Array = $String -split '\s+'
-                $NewArray = @(0..($Array.count-1))
-                while ($Array[-1] -in $Prefixes)
+                $Array = $User.SurName -replace '\.|,','' -split '\s+'
+                $SurnameCheck = compare $Array $Prefixes -IncludeEqual
+                $DisplayNameCheck = compare $User.DisplayName.Split(' ') $Prefixes -IncludeEqual
+                If ($SurnameCheck.SideIndicator -contains '==')
                 {
-                    for ($i = 0; $i -lt $Array.Count; $i++)
-                    {
-                        $NewArray[$i] = $Array[($i-1)]
-                    }
-                    $Array = @($NewArray)
+                    $FullSurname = $SurnameCheck.Where({$_.SideIndicator -ne '=>'}).InputObject -join ' '
                 }
-                Write-Output "$($User.GivenName) $($Array -join ' ')"
+                elseif ($DisplayNameCheck.SideIndicator -contains '==')
+                {
+                    $FullSurname = "$($DisplayNameCheck.Where({$_.SideIndicator -eq '=='}).InputObject -join ' ') $($User.Surname)"
+                }
+                else
+                {
+                    Write-Verbose "No prefixes"
+                    $FullSurname = $User.Surname
+                }
+                If ($PSBoundParameters['SurnameOnly'])
+                {
+                    Write-Output $FullSurname
+                }
+                else
+                {
+                    Write-Output "$($User.GivenName) $FullSurname"
+                }
             }
             elseif ($User.DisplayName)
             {
-                Write-Output $User.DisplayName
+                $User.DisplayName
             }
         }
     }
