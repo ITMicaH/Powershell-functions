@@ -69,6 +69,10 @@ function Get-DutchFullName
     {
         Foreach ($User in $ADUser)
         {
+            If ((Get-Member -InputObject $User -MemberType Property).Name -notcontains 'DisplayName')
+            {
+                Write-Warning "User object $($User.SamAccountName) does not have the property [DisplayName]"
+            }
             If ($User.Surname -and $User.GivenName)
             {
                 $Array = $User.SurName -replace '\.|,','' -split '\s+'
