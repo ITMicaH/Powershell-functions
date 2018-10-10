@@ -73,7 +73,7 @@ function Get-DutchFullName
             {
                 $Array = $User.SurName -replace '\.|,','' -split '\s+'
                 $SurnameCheck = compare $Array $Prefixes -IncludeEqual
-                $DisplayNameCheck = compare $User.DisplayName.Split(' ') $Prefixes -IncludeEqual
+                $DisplayNameCheck = compare ($User.DisplayName -Split ' ') $Prefixes -IncludeEqual
                 If ($SurnameCheck.SideIndicator -contains '==')
                 {
                     $FullSurname = $SurnameCheck.Where({$_.SideIndicator -ne '=>'}).InputObject -join ' '
