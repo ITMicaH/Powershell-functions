@@ -31,11 +31,20 @@ function Invoke-ElevatedCommand
         $Parameters
 
     )
-    $Params = $Parameters.GetEnumerator().foreach{"-$($_.key) '$($_.value)'"} -join ' '
+
+    If ($PSBoundParameters['Parameters'])
+    {
+        $Params = $Parameters.GetEnumerator().foreach{"-$($_.key) '$($_.value)'"} -join ' '
+        $Script = "$Command $Params"
+    }
+    else
+    {
+        $Script = $Command
+    }
     $ProcessParams = @{
         FilePath = 'powershell.exe'
         Verb = 'RunAs'
-        ArgumentList = "-command & {$Command $Params}"
+        ArgumentList = "-command & {$Script}"
         Wait = $true
         WindowStyle = 'Hidden'
     }
