@@ -12,6 +12,8 @@
         force = $true
    }
    Elevate Stop-Process $Params
+.EXAMPLE
+   Invoke-ElevatedCommand -Command "ipconfig /flushdns"
 #>
 function Invoke-ElevatedCommand
 {
