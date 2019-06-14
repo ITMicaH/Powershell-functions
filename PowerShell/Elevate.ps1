@@ -44,9 +44,14 @@ function Invoke-ElevatedCommand
     $ProcessParams = @{
         FilePath = 'powershell.exe'
         Verb = 'RunAs'
-        ArgumentList = "-command & {$Script}"
+        ArgumentList = "-command & {$Script | Export-Clixml -Path $env:USERPROFILE\PSoutput.xml}"
         Wait = $true
         WindowStyle = 'Hidden'
     }
     Start-Process @ProcessParams
+    If ($Output = Import-Clixml -Path $env:USERPROFILE\PSoutput.xml -ErrorAction SilentlyContinue)
+    {
+        Remove-Item $env:USERPROFILE\PSoutput.xml
+        return $Output
+    }
 }
