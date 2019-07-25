@@ -2,7 +2,7 @@
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
     <Date>2019-07-25T08:44:17.32895</Date>
-    <Author></Author>
+    <Author>ITMicaH</Author>
     <URI>\Reset Terminal Server grace period</URI>
   </RegistrationInfo>
   <Triggers>
