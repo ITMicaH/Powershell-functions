@@ -48,6 +48,7 @@ function Remove-MaliciousEmails
         $Server,
 
         # Name of the target mailbox
+        [Parameter(mandatory)]
         [string]
         $TargetMailbox
     )
