@@ -44,6 +44,7 @@ function Remove-MaliciousEmails
         $EndDate,
 
         # Name of the exchange server
+        [Parameter(mandatory)]
         [string]
         $Server,
 
