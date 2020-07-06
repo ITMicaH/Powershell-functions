@@ -312,9 +312,9 @@ function Get-CitrixODATAInformation
                     }
                     switch -Regex ($Member.Definition)
                     {
-                        Date       {If ($Properties.$($Member.Name).innertext)
-                                       {$MemberParams['Value'] = (Get-Date $Properties.$($Member.Name).innertext).ToLocalTime();break}}
-                        XmlElement {$MemberParams['Value'] = $Properties.$($Member.Name).innertext;break}
+                        '(?<!up)Date' {If ($Properties.$($Member.Name).innertext)
+                                          {$MemberParams['Value'] = (Get-Date $Properties.$($Member.Name).innertext).ToLocalTime();break}}
+                        XmlElement    {$MemberParams['Value'] = $Properties.$($Member.Name).innertext;break}
                     }
                     If ($MemberParams.Value -match '^\d{1,2}$')
                     {
