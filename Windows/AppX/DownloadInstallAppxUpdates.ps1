@@ -4,12 +4,12 @@ using namespace Microsoft.Dism.Commands
 
 #region constants
 
-$TempPath = 'C:\Temp'
-$Language = 'nl-nl'
-$Proxy = 'http://proxy02:8080'
-$ProxyUser = ''
-$ProxyUserPW = ''
-$Share = '\\nuthvs02\content$\win10\AppxUpdates'
+$TempPath = '' # Path to existing temporary location (E.G. C:\Temp)
+$Language = '' # Language for Appx packages (E.G. en-US, nl-nl...)
+$Proxy = '' # Proxyserver (E.G. http://proxy:80)
+$ProxyUser = '' # Username for authenticated proxies
+$ProxyUserPW = '' # Password for authenticated proxies
+$Share = '' # Path to share (E.G. \\FileServer\AppxShare)
 $VerbosePreference = 'SilentlyContinue' #SilentlyContinue,Continue
 
 #endregion
