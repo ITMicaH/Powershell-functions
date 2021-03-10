@@ -9,4 +9,4 @@ Use this script to update Windows 10 AppX packages in a controlled manner. This 
 ## UpdateAppxFromFileshare.ps1
 
 ### Description
-This script will update locally provisioned AppX-packages from a fileshare.
+This script will update locally provisioned AppX-packages from a fileshare. You can use it to update AppX packages on FAT clients.
