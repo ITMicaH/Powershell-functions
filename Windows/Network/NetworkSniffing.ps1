@@ -1,3 +1,68 @@
+#region helper functions
+
+# Check elevated 64-bit environment requirement
+function CheckEnvironment
+{
+    $Id = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+    $Wp = [System.Security.Principal.WindowsPrincipal]::new($Id)
+    $Elevated = $Wp.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    $x64 = [environment]::Is64BitProcess
+    if ($Elevated -and $x64)
+    {
+        return $true
+    }
+    else
+    {
+        switch -w ([environment]::CommandLine)
+        {
+            *\powershell_ise.* {$Program = 'PowerShell_ISE'}
+            *\powershell.*     {$Program = 'PowerShell'}
+        }
+        $title    = "64-bit elevated $($Program.Replace('_',' ')) required"
+        $question = "Do you want to start an elevated 64-bit $($Program.Replace('_',' '))?"
+        $choices  = '&Yes', '&No'
+
+        $decision = $Host.UI.PromptForChoice($title, $question, $choices, 0)
+        if ($decision -eq 0) {
+            if ($Elevated)
+            {
+                Start-Process "C:\Windows\sysnative\WindowsPowerShell\v1.0\$Program.exe"
+            }
+            else
+            {
+                $Cmd = "if ([environment]::Is64BitProcess)
+                {
+                    write 'Starting $Program'
+                    Start-Process '$Program.exe'
+                }
+                else
+                {
+                    write 'Starting x64 $Program'
+                    Start-Process C:\Windows\sysnative\WindowsPowerShell\v1.0\$Program.exe
+                }"
+                Start-Process -FilePath powershell -Verb RunAs -ArgumentList "-Command $Cmd" -Wait
+            }
+        }
+        return $false
+    }
+}
+
+# Invoke pktmon.exe with arguments
+function Invoke-PktMon
+{
+    Param(
+        [Parameter(mandatory,ValueFromRemainingArguments)]
+        [string[]]
+        $Arguments
+    )
+    If (CheckEnvironment)
+    {
+        Invoke-Expression -Command "pktmon $($Arguments -join ' ')"
+    }
+}
+
+#endregion helper functions
+
 #region functions
 
 <#
@@ -30,7 +95,7 @@ function Get-PktMonFilter
         $Name
     )
 
-    $List = pktmon filter list
+    $List = Invoke-PktMon -Arguments 'filter','list'
     $Headers = @{
         Index = $List[1].IndexOf('#')
         Name = $List[1].IndexOf('Name')
@@ -219,7 +284,7 @@ function New-PktMonFilter
         Encapsulation {$null = $Arguments.Add("-e $VXLANPort")}
         HeartBeat     {$null = $Arguments.Add("-b")}
     }
-    $Result = Invoke-Expression -Command "pktmon $($Arguments -join ' ')"
+    $Result = Invoke-PktMon -Arguments $Arguments
     if ($Result -eq 'Filter added.')
     {
         Get-PktMonFilter | select -Last 1
@@ -286,7 +351,7 @@ function Remove-PktMonFilter
         {
             if ($pscmdlet.ShouldProcess("All", "Remove packet filter"))
             {
-                $null = pktmon filter remove
+                $null = Invoke-PktMon filter remove
                 return
             }
         }
@@ -300,7 +365,7 @@ function Remove-PktMonFilter
         }
         if ($pscmdlet.ShouldProcess("$InputObject", "Remove packet filter"))
         {
-            $null = pktmon filter remove
+            $null = Invoke-PktMon filter remove
             $ToRemove += $InputObject.Index
         }
     }
@@ -431,7 +496,7 @@ function Start-PktMonCapture
         FileSize      {$null = $Arguments.Add("-s $FileSize")}
         Mode          {$null = $Arguments.Add("-m $Mode")}
     }
-    $Result = Invoke-Expression -Command "pktmon $($Arguments -join ' ')"
+    $Result = Invoke-PktMon -Arguments $Arguments
     if (!$PSBoundParameters.Quiet)
     {
         $Result
@@ -461,13 +526,14 @@ function Stop-PktMonCapture
 
     If ($PSBoundParameters.Quiet)
     {
-        $null = pktmon stop
+        $null = Invoke-PktMon stop
     }
     else
     {
-        pktmon stop
+        Invoke-PktMon stop
     }
 }
+
 #endregion functions
 
 #region Classes
@@ -518,39 +584,3 @@ class PktFilter
 }
 
 #endregion Classes
-
-<#
-#region regex
-$Regex = '^(?<Date>.{18})\s(?<Type>[\w-]+):\s(?<Log>[^\r]+)'
-$INETINSPECT = 'Owner\s=\s(?<Owner>0x[^,]+),\sInspectHandle\s=\s(?<Handle>0x[^,]+),\sInspectType\s=\s(?<Type>\w+)\s,\sAction\s=\s(?<Action>\w+)\s,\sStatus\s=\s(?<Status>\w+)$'
-
-#endregion regex
-$null = pktmon filter remove
-$Port.ForEach{
-    $null = pktmon filter add -p $_
-}
-$NoMatch = [Collections.Arraylist]::new()
-$Sniffing = pktmon start -t -p Microsoft-Windows-TCPIP -m real-time | foreach{
-    #Remove-Variable -Name Output -ea 0
-    If ($_ -match $Regex)
-    {
-        $Matches.Remove(0)
-        $Output = [pscustomobject]$Matches
-        $Output.Date = Get-Date $Output.Date
-    }
-    else
-    {
-        $null = $NoMatch.Add($_)
-        continue
-    }
-    if ($Pattern = Get-Variable -Name $Output.Type -ValueOnly -ea 0)
-    {
-        $null = $Output.Message -match $Pattern
-        $Matches.Remove(0)
-        $Output | Add-Member -MemberType NoteProperty -Name ParsedLog -Value ([pscustomobject]$Matches)
-    }
-    $Output
-}
-pktmon stop
-
-#>
