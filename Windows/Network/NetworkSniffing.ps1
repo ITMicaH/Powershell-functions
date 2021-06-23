@@ -1,5 +1,3 @@
-#Requires -RunAsAdministrator
-
 #region helper functions
 
 # Check 64-bit environment requirement
