@@ -1,49 +1,30 @@
+#Requires -RunAsAdministrator
+
 #region helper functions
 
-# Check elevated 64-bit environment requirement
+# Check 64-bit environment requirement
 function CheckEnvironment
 {
-    $Id = [System.Security.Principal.WindowsIdentity]::GetCurrent()
-    $Wp = [System.Security.Principal.WindowsPrincipal]::new($Id)
-    $Elevated = $Wp.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-    $x64 = [environment]::Is64BitProcess
-    if ($Elevated -and $x64)
-    {
-        return $true
-    }
-    else
+    if (![environment]::Is64BitProcess)
     {
         switch -w ([environment]::CommandLine)
         {
-            *\powershell_ise.* {$Program = 'PowerShell_ISE'}
-            *\powershell.*     {$Program = 'PowerShell'}
+            *\powershell_ise.exe {$Program = 'PowerShell_ISE'}
+            *\powershell.exe     {$Program = 'PowerShell'}
         }
-        $title    = "64-bit elevated $($Program.Replace('_',' ')) required"
-        $question = "Do you want to start an elevated 64-bit $($Program.Replace('_',' '))?"
+        $title    = "64-bit $($Program.Replace('_',' ')) required"
+        $question = "Do you want to start a 64-bit $($Program.Replace('_',' '))?"
         $choices  = '&Yes', '&No'
 
-        $decision = $Host.UI.PromptForChoice($title, $question, $choices, 0)
+        $decision = $Host.UI.PromptForChoice($title, $question, $choices, 1)
         if ($decision -eq 0) {
-            if ($Elevated)
-            {
-                Start-Process "C:\Windows\sysnative\WindowsPowerShell\v1.0\$Program.exe"
-            }
-            else
-            {
-                $Cmd = "if ([environment]::Is64BitProcess)
-                {
-                    write 'Starting $Program'
-                    Start-Process '$Program.exe'
-                }
-                else
-                {
-                    write 'Starting x64 $Program'
-                    Start-Process C:\Windows\sysnative\WindowsPowerShell\v1.0\$Program.exe
-                }"
-                Start-Process -FilePath powershell -Verb RunAs -ArgumentList "-Command $Cmd" -Wait
-            }
+            Start-Process -FilePath "C:\Windows\sysnative\WindowsPowerShell\v1.0\$Program.exe" -Verb RunAs
         }
         return $false
+    }
+    else
+    {
+        return $true
     }
 }
 
@@ -71,13 +52,13 @@ function Invoke-PktMon
 .DESCRIPTION
     Get a list of active packet filters
 .EXAMPLE
-    Get-PktMonFilter
+    Get-PktFilter
     Shows a list of all active packet filters
 .EXAMPLE
-    Get-PktMonFilter -Name VLAN*
+    Get-PktFilter -Name VLAN*
     Shows package filters with names that start with VLAN
 #>
-function Get-PktMonFilter
+function Get-PktFilter
 {
     [CmdletBinding(DefaultParameterSetName='Index')]
     [OutputType([PktFilter])]
@@ -173,16 +154,16 @@ function Get-PktMonFilter
 .DESCRIPTION
    Add a packet filter to control which packets are reported.
 .EXAMPLE
-   New-PktMonFilter -Name MyPing -IPAddress 10.10.10.10 -Protocol ICMP
+   New-PktFilter -Name MyPing -IPAddress 10.10.10.10 -Protocol ICMP
    Creates a ping filter
 .EXAMPLE
-   New-PktMonFilter -Name MySmbSyn -IPAddress 10.10.10.10 -Protocol TCP -TCPFilter SYN -Port 445
+   New-PktFilter -Name MySmbSyn -IPAddress 10.10.10.10 -Protocol TCP -TCPFilter SYN -Port 445
    Creates a TCP SYN filter for SMB traffic
 .EXAMPLE
-   New-PktMonFilter -Name MySubnet -IPAddress 10.10.10.0/24
+   New-PktFilter -Name MySubnet -IPAddress 10.10.10.0/24
    Creates a subnet filter
 #>
-function New-PktMonFilter
+function New-PktFilter
 {
     [CmdletBinding()]
     [OutputType([PktFilter])]
@@ -287,7 +268,7 @@ function New-PktMonFilter
     $Result = Invoke-PktMon -Arguments $Arguments
     if ($Result -eq 'Filter added.')
     {
-        Get-PktMonFilter | select -Last 1
+        Get-PktFilter | select -Last 1
     }
     else
     {
@@ -301,16 +282,16 @@ function New-PktMonFilter
 .DESCRIPTION
    Remove packet filter(s)
 .EXAMPLE
-   Remove-PktMonFilter
+   Remove-PktFilter
    Removes all packet filters
 .EXAMPLE
-   Remove-PktMonFilter -Name VLAN*
+   Remove-PktFilter -Name VLAN*
    Removes packet filters with a name that starts with VLAN
 .EXAMPLE
-   Get-PktMonFilter -Index 1,2 | Remove-PktMonFilter -PassThru
+   Get-PktFilter -Index 1,2 | Remove-PktFilter -PassThru
    Removes filters with Index 1 and 2 and displays the remaining active filters
 #>
-function Remove-PktMonFilter
+function Remove-PktFilter
 {
     [CmdletBinding(DefaultParameterSetName='Object', 
                   SupportsShouldProcess,
@@ -340,7 +321,7 @@ function Remove-PktMonFilter
 
     Begin
     {
-        $Filters = Get-PktMonFilter
+        $Filters = Get-PktFilter
         $ToRemove = @()
     }
     Process
@@ -357,11 +338,11 @@ function Remove-PktMonFilter
         }
         if ($PSBoundParameters.Index)
         {
-            $InputObject = Get-PktMonFilter -Index $Index
+            $InputObject = Get-PktFilter -Index $Index
         }
         if ($PSBoundParameters.Name)
         {
-            $InputObject = Get-PktMonFilter -Name $Name
+            $InputObject = Get-PktFilter -Name $Name
         }
         if ($pscmdlet.ShouldProcess("$InputObject", "Remove packet filter"))
         {
@@ -381,12 +362,12 @@ function Remove-PktMonFilter
                 $UsedProps.foreach{
                     $Params.Add($_,$Filter.$_)
                 }
-                $null = New-PktMonFilter @Params
+                $null = New-PktFilter @Params
             }
         }
         if ($PSBoundParameters.PassThru)
         {
-            Get-PktMonFilter
+            Get-PktFilter
         }
     }
 }
@@ -397,19 +378,19 @@ function Remove-PktMonFilter
 .DESCRIPTION
    Start package capture and event collection
 .EXAMPLE
-   Start-PKtMonCapture -Capture
+   Start-PktCapture -Capture
    Starts packet capture
 .EXAMPLE
-   Start-PKtMonCapture -CountersOnly
+   Start-PktCapture -CountersOnly
    Starts packet capture counters only
 .EXAMPLE
-   Start-PKtMonCapture -EventProvider Microsoft-Windows-TCPIP,Microsoft-Windows-NDIS
+   Start-PktCapture -EventProvider Microsoft-Windows-TCPIP,Microsoft-Windows-NDIS
    Starts event logging
 .EXAMPLE
-   Start-PKtMonCapture -Capture -EventProvider Microsoft-Windows-TCPIP -EventMask 0xFF -EventLogLevel 4
+   Start-PktCapture -Capture -EventProvider Microsoft-Windows-TCPIP -EventMask 0xFF -EventLogLevel 4
    Starts packet capture with event logging
 #>
-function Start-PktMonCapture
+function Start-PktCapture
 {
     [CmdletBinding()]
     Param
@@ -507,30 +488,230 @@ function Start-PktMonCapture
 .Synopsis
    Stop data collection
 .DESCRIPTION
-   Stop data collection
+   Stop data collection. Returns the generated etl file.
 .EXAMPLE
-   Stop-PktMonCapture
-   Stops data collection
-.EXAMPLE
-   Stop-PktMonCapture -Quiet
-   Stop data collection without generating output
+   Stop-PktCapture
+   Stops data collection and returns the generated etl file
 #>
-function Stop-PktMonCapture
+function Stop-PktCapture
 {
+    [CmdletBinding()]
+    [OutputType([System.IO.FileInfo])]
+    Param()
+
+    $Regex = '^Log\sfile\:\s(?<File>[^\(]+)\s\((?<Events>.+)\)$'
+    switch -regex (Invoke-PktMon stop)
+    {
+        $Regex  {
+                    Write-Verbose $Matches.Events
+                    Get-Item $Matches.File
+                }
+        Default {Write-Verbose $_}
+    }
+}
+
+<#
+.Synopsis
+   Convert ETL log file.
+.DESCRIPTION
+   Convert ETL log file to text or pcapng format.
+.EXAMPLE
+   Convert-PktEtlLog -EtlFile C:\Windows\System32\PktMon.etl -Pcapng
+   Convert ETL file to pcapng format
+.EXAMPLE
+   Another example of how to use this cmdlet
+#>
+function Convert-PktEtlLog
+{
+    [CmdletBinding(DefaultParameterSetName='pcap')]
+    [OutputType([System.IO.FileInfo])]
     Param
     (
-        # Generate no output
+        # ETL file to convert.
+        [Parameter(mandatory)]
+        [string]
+        $EtlFile,
+
+        # Path of the formatted file.
+        [string]
+        $FilePath,
+
+        # Convert to text format.
+        [Parameter(mandatory,ParameterSetName='text')]
         [switch]
-        $Quiet
+        $Text,
+
+        # Convert to pcapng format.
+        [Parameter(mandatory,ParameterSetName='pcap')]
+        [switch]
+        $Pcapng,
+
+        # Convert dropped packets only.
+        [Parameter(ParameterSetName='pcap')]
+        [switch]
+        $DroppedOnly,
+
+        # Filter packets by a specific component ID.
+        [Parameter(ParameterSetName='pcap')]
+        [int]
+        $ComponentID,
+
+        # Display log file statistical information.
+        [Parameter(ParameterSetName='text')]
+        [switch]
+        $StatsOnly,
+
+        # Use timestamp only prefix for events and packets.
+        [Parameter(ParameterSetName='text')]
+        [switch]
+        $TimeStamp,
+
+        # Print event metadata, such as logging level and keywords.
+        [Parameter(ParameterSetName='text')]
+        [switch]
+        $MetaData,
+
+        # Path to TMF files for decoding WPP traces.
+        [Parameter(ParameterSetName='text')]
+        [string[]]
+        $TmfPath,
+
+        # Use abbreviated packet format.
+        [Parameter(ParameterSetName='text')]
+        [switch]
+        $Brief,
+
+        # Verbosity level from 1 to 3.
+        [Parameter(ParameterSetName='text')]
+        [ValidateRange(1,3)]
+        [int]
+        $VerboseLvl,
+
+        # Include hexadecimal format.
+        [Parameter(ParameterSetName='text')]
+        [switch]
+        $IncludeHex,
+
+        # Don't print ethernet header.
+        [Parameter(ParameterSetName='text')]
+        [switch]
+        $NoEthernet,
+
+        # Custom VXLAN port.
+        [Parameter(ParameterSetName='text')]
+        [int]
+        $VXLANPort
+
     )
 
-    If ($PSBoundParameters.Quiet)
+    $Arguments = [Collections.Arraylist]::new()
+    switch ($PSBoundParameters.Keys)
     {
-        $null = Invoke-PktMon stop
+        Text        {$null = $Arguments.Insert(0,'etl2txt')}
+        Pcapng      {$null = $Arguments.Insert(0,'etl2pcap')}
+        EtlFile     {
+                        If ($Arguments.Count -gt 0)
+                        {
+                            $null = $Arguments.Insert(1, $EtlFile)
+                        }
+                        else
+                        {
+                            $null = $Arguments.Add($EtlFile)
+                        }
+                    }
+        FilePath    {$null = $Arguments.Add("-o $FilePath")}
+        DroppedOnly {$null = $Arguments.Add("-d")}
+        ComponentID {$null = $Arguments.Add("-c $ComponentID")}
+        StatsOnly   {$null = $Arguments.Add("-s")}
+        TimeStamp   {$null = $Arguments.Add("-t")}
+        MetaData    {$null = $Arguments.Add("-m")}
+        TmfPath     {$null = $Arguments.Add("-p $($TmfPath -join ';')")}
+        Brief       {$null = $Arguments.Add("-b")}
+        VerboseLvl  {$null = $Arguments.Add("-v")}
+        IncludeHex  {$null = $Arguments.Add("-x")}
+        NoEthernet  {$null = $Arguments.Add("-e")}
+        VXLANPort   {$null = $Arguments.Add("-l")}
+    }
+    $Result = Invoke-PktMon -Arguments $Arguments
+    if ($PSBoundParameters.StatsOnly)
+    {
+        return $Result
     }
     else
     {
-        Invoke-PktMon stop
+        $Result | foreach{
+            if ($_ -like 'packet*')
+            {
+                Write-Verbose $_
+            }
+            elseif ($_ -match 'Formatted file\:\s+(?<File>.+)')
+            {
+                Get-Item $Matches.File
+            }
+        }
+    }
+}
+
+<#
+.Synopsis
+   Lists all active networking components that can be monitored
+.DESCRIPTION
+   Lists all active networking components that can be monitored,
+   allowing you to examine the networking stack layout. The command
+   shows networking components (drivers) arranged by adapters bindings.
+.EXAMPLE
+   Get-PktComponents
+   Shows network adapters only.
+.EXAMPLE
+   Get-PktComponents -All
+   Shows all networking components
+.EXAMPLE
+   Get-PktComponents -PoSH
+   Shows all networking components, including hidden components.
+   Output is PowerSHell objects.
+#>
+function Get-PktComponents
+{
+    [CmdletBinding(DefaultParameterSetName='default')]
+    Param
+    (
+        # Show all component types.
+        [Parameter(ParameterSetName='default')]
+        [switch]
+        $All,
+
+        # Show components that are hidden by default.
+        [Parameter(ParameterSetName='default')]
+        [switch]
+        $Hidden,
+
+        # Output in json format. Implies -All and -Hidden.
+        [Parameter(ParameterSetName='json')]
+        [switch]
+        $Json,
+
+        # Output in PowerShell objects. Implies -All and -Hidden.
+        [Parameter(ParameterSetName='posh')]
+        [switch]
+        $PoSH
+    )
+
+    $Arguments = [Collections.Arraylist]::new(@("list"))
+    switch ($PSBoundParameters.Keys)
+    {
+        All    {$null = $Arguments.Add("-a")}
+        Hidden {$null = $Arguments.Add("-i")}
+        Json   {$null = $Arguments.Add("--json")}
+        PoSH   {$null = $Arguments.Add("--json")}
+    }
+    $Result = Invoke-PktMon -Arguments $Arguments
+    If ($PSBoundParameters.PoSH)
+    {
+        $Result | ConvertFrom-Json
+    }
+    else
+    {
+        return $Result
     }
 }
 
@@ -582,5 +763,3 @@ class PktFilter
         return ($array -join '; ')
    }
 }
-
-#endregion Classes
