@@ -1,28 +1,49 @@
 #region helper functions
 
-# Check 64-bit environment requirement
+# Check elevated 64-bit environment requirement
 function CheckEnvironment
 {
-    if (![environment]::Is64BitProcess)
+    $Id = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+    $Wp = [System.Security.Principal.WindowsPrincipal]::new($Id)
+    $Elevated = $Wp.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    $x64 = [environment]::Is64BitProcess
+    if ($Elevated -and $x64)
     {
-        switch -w ([environment]::CommandLine)
-        {
-            *\powershell_ise.exe {$Program = 'PowerShell_ISE'}
-            *\powershell.exe     {$Program = 'PowerShell'}
-        }
-        $title    = "64-bit $($Program.Replace('_',' ')) required"
-        $question = "Do you want to start a 64-bit $($Program.Replace('_',' '))?"
-        $choices  = '&Yes', '&No'
-
-        $decision = $Host.UI.PromptForChoice($title, $question, $choices, 1)
-        if ($decision -eq 0) {
-            Start-Process -FilePath "C:\Windows\sysnative\WindowsPowerShell\v1.0\$Program.exe" -Verb RunAs
-        }
-        return $false
+        return $true
     }
     else
     {
-        return $true
+        switch -w ([environment]::CommandLine)
+        {
+            *\powershell_ise.* {$Program = 'PowerShell_ISE'}
+            *\powershell.*     {$Program = 'PowerShell'}
+        }
+        $title    = "64-bit elevated $($Program.Replace('_',' ')) required"
+        $question = "Do you want to start an elevated 64-bit $($Program.Replace('_',' '))?"
+        $choices  = '&Yes', '&No'
+
+        $decision = $Host.UI.PromptForChoice($title, $question, $choices, 0)
+        if ($decision -eq 0) {
+            if ($Elevated)
+            {
+                Start-Process "C:\Windows\sysnative\WindowsPowerShell\v1.0\$Program.exe"
+            }
+            else
+            {
+                $Cmd = "if ([environment]::Is64BitProcess)
+                {
+                    write 'Starting $Program'
+                    Start-Process '$Program.exe'
+                }
+                else
+                {
+                    write 'Starting x64 $Program'
+                    Start-Process C:\Windows\sysnative\WindowsPowerShell\v1.0\$Program.exe
+                }"
+                Start-Process -FilePath powershell -Verb RunAs -ArgumentList "-Command $Cmd" -Wait
+            }
+        }
+        return $false
     }
 }
 
