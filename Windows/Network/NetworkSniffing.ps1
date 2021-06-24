@@ -1,6 +1,6 @@
 #region helper functions
 
-# Check elevated 64-bit environment requirement
+# Check 64-bit elevated environment requirement
 function CheckEnvironment
 {
     $Id = [System.Security.Principal.WindowsIdentity]::GetCurrent()
@@ -536,9 +536,10 @@ function Stop-PktCapture
    Convert ETL log file to text or pcapng format.
 .EXAMPLE
    Convert-PktEtlLog -EtlFile C:\Windows\System32\PktMon.etl -Pcapng
-   Convert ETL file to pcapng format
+   Converts ETL file to pcapng format
 .EXAMPLE
-   Another example of how to use this cmdlet
+   Convert-PktEtlLog -EtlFile C:\Windows\System32\PktMon.etl -Text -StatsOnly
+   Displays log file statistical information.
 #>
 function Convert-PktEtlLog
 {
@@ -673,6 +674,38 @@ function Convert-PktEtlLog
 
 <#
 .Synopsis
+   Query current Packet Monitor status.
+.DESCRIPTION
+   Query current Packet Monitor status.
+.EXAMPLE
+   Get-PktMonStatus
+   Query current Packet Monitor status.
+.EXAMPLE
+   Get-PktMonStatus -Buffer
+   Display ETW buffer information.
+#>
+function Get-PktMonStatus
+{
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    Param
+    (
+        # Display ETW buffer information.
+        [switch]
+        $Buffer
+    )
+    If ($PSBoundParameters.Buffer)
+    {
+        Invoke-PktMon -Arguments status,-b
+    }
+    else
+    {
+        Invoke-PktMon -Arguments status
+    }
+}
+
+<#
+.Synopsis
    Lists all active networking components that can be monitored
 .DESCRIPTION
    Lists all active networking components that can be monitored,
@@ -782,3 +815,5 @@ class PktFilter
         return ($array -join '; ')
    }
 }
+
+#endregion Classes
