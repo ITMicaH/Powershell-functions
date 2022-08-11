@@ -1,0 +1,169 @@
+#region Variables
+
+$vDiskName = ''
+
+#endregion Variables
+
+#region constants
+
+$PVSServer = ''
+$CVADServer = ''
+$VMName = ''
+$PVSSite = ''
+$PVSStore = ''
+$VIServer = ''
+$PVSBootMethod = 'BDM' # or PXE
+
+#endregion constants
+
+#region prerequisites
+
+If (!(Get-PvsConnection))
+{
+    Add-PSSnapin Citrix.PVS.Snapin -ErrorAction Stop
+    Set-PvsConnection -Server $PVSServer
+}
+
+if (!(Get-Module -Name Citrix.XenDesktop.Admin))
+{
+    Import-Module Citrix.XenDesktop.Admin
+    Add-PSSnapin Citrix.Broker.Admin.V2
+}
+Get-XDSite -AdminAddress $CVADServer | Out-Null
+
+If (!(Get-PSDrive -Name vi))
+{
+    Import-Module VMware.VimAutomation.Core
+    $null = Connect-VIServer -Server $VIServer -WarningAction SilentlyContinue -ErrorAction Stop
+}
+
+$PVSDevice = Get-PvsDevice -DeviceName $VMName -ErrorAction Stop
+$VM = Get-VM -Name $VMName -ErrorAction Stop
+$vDisk = Get-PvsDisk -DiskLocatorName $vDiskName -SiteName $PVSSite -StoreName $PVSStore -ErrorAction Stop
+$Brokermachine = Get-BrokerMachine -HostedMachineName $VMName -ErrorAction Stop
+
+#endregion prerequisites
+
+Write-Progress -Activity 'Update VMWare Tools' -CurrentOperation 'Creating new version' -PercentComplete 0
+$PVSVersion = New-PvsDiskMaintenanceVersion -DiskLocatorName $vDiskName -SiteName $PVSSite -StoreName $PVSStore
+if (($PVSDevice | Get-PvsDeviceInfo).DiskLocatorId -ne $vDisk.DiskLocatorId)
+{
+    #Set correct vDisk
+    Write-Progress -Activity 'Update VMWare Tools' -CurrentOperation 'Setting correct disk' -PercentComplete 5
+    Add-PvsDiskLocatorToDevice -DiskLocatorId $vDisk.DiskLocatorId -DeviceId $PVSDevice.DeviceId -RemoveExisting
+}
+Write-Progress -Activity 'Update VMWare Tools' -CurrentOperation '(Re)Starting VM' -PercentComplete 10
+IF ($VM.PowerState -eq 'PoweredOn')
+{
+    $null = Restart-VMGuest -VM $VM
+}
+else
+{
+    $null = Start-VM -VM $VM
+}
+while ((Get-View -VIObject $VM).Guest.ToolsRunningStatus -ne 'guestToolsRunning')
+{
+    sleep -Milliseconds 500
+}
+If (($PVSDevice | Get-PvsDeviceInfo).DiskVersion -ne $PVSVersion.Version)
+{
+    throw "Unable to boot from new PVS version $($PVSVersion.Version)"
+}
+
+Write-Progress -Activity 'Update VMWare Tools' -CurrentOperation 'Creating new e1000 NIC' -PercentComplete 20
+$NIC = $VM | Get-NetworkAdapter
+$TempNIC = $VM | New-NetworkAdapter -Type e1000 -Portgroup $NIC.NetworkName -StartConnected
+
+If ($PVSBootMethod -eq 'PXE')
+{
+    #Change VM bootorder
+    Write-Progress -Activity 'Update VMWare Tools' -CurrentOperation 'Changing boot order to new NIC' -PercentComplete 25
+    $Spec = New-Object -TypeName VMware.Vim.VirtualMachineConfigSpec
+    $Spec.BootOptions = $VM.ExtensionData.Config.BootOptions.BootOrder
+    $BootNIC = New-Object -TypeName VMware.Vim.VirtualMachineBootOptionsBootableEthernetDevice
+    $BootNIC.DeviceKey = $TempNIC.ExtensionData.Key
+    $Spec.BootOptions.BootOrder = $BootNIC
+    $VM.ExtensionData.ReconfigVM($Spec)
+}
+
+# Wait for install network adapter
+Write-Progress -Activity 'Update VMWare Tools' -CurrentOperation 'Installing NIC drivers' -PercentComplete 30
+while ((Get-NetAdapter -CimSession $VMName | where Status -eq Up).Count -ne 2)
+{
+    Sleep -Milliseconds 500
+}
+
+if (!$Brokermachine.InMaintenanceMode)
+{
+    $Brokermachine | Set-BrokerMachine -InMaintenanceMode $true
+}
+
+Write-Progress -Activity 'Update VMWare Tools' -CurrentOperation 'Shutting down VM' -PercentComplete 40
+$null = Stop-VMGuest -VM $VM -Confirm:$False
+while ((Get-View -VIObject $VM).Guest.ToolsRunningStatus -eq 'guestToolsRunning')
+{
+    sleep -Milliseconds 500
+}
+
+#Set PVS device mac
+Write-Progress -Activity 'Update VMWare Tools' -CurrentOperation 'Configuring PVS Device' -PercentComplete 50
+$PVSDevice.DeviceMac = $TempNIC.MacAddress.Replace(':','-')
+Set-PvsDevice -Device $PVSDevice
+If ($PVSBootMethod -eq 'BDM')
+{
+    Write-Progress -Activity 'Update VMWare Tools' -CurrentOperation 'Removing VMXNet3 NIC' -PercentComplete 55
+    Remove-NetworkAdapter -NetworkAdapter $NIC -Confirm:$False
+}
+
+Write-Progress -Activity 'Update VMWare Tools' -CurrentOperation 'Starting VM' -PercentComplete 60
+$null = Start-VM $VM
+while ((Get-View -VIObject $VM).Guest.ToolsRunningStatus -ne 'guestToolsRunning')
+{
+    sleep -Milliseconds 500
+}
+
+Write-Progress -Activity 'Update VMWare Tools' -CurrentOperation 'Updating VMWare Tools' -PercentComplete 70
+Update-Tools -NoReboot -VM $VM
+If ((Get-View -VIObject $VM).Guest.ToolsStatus -ne 'toolsOk')
+{
+    Write-Progress -Activity 'Update VMWare Tools' -CurrentOperation 'Restarting VM' -PercentComplete 75
+    $null = Restart-VMGuest -VM $VM -Confirm:$false
+    while ((Get-View -VIObject $VM).Guest.ToolsRunningStatus -eq 'guestToolsRunning')
+    {
+        sleep -Milliseconds 500
+    }
+    while ((Get-View -VIObject $VM).Guest.ToolsRunningStatus -ne 'guestToolsRunning')
+    {
+        sleep -Milliseconds 500
+    }
+}
+
+#Cleanup
+If ($PVSBootMethod -eq 'BDM')
+{
+    Write-Progress -Activity 'Update VMWare Tools' -CurrentOperation 'ReCreating VMXNet3 NIC' -PercentComplete 80
+    $NewNIC = New-NetworkAdapter -MacAddress $NIC.MacAddress -NetworkName $NIC.NetworkName -Type Vmxnet3 -StartConnected -VM $VM
+}
+while ((Get-NetAdapter -CimSession $VMName | where Status -eq Up).Count -ne 2)
+{
+    Sleep -Milliseconds 500
+}
+Write-Progress -Activity 'Update VMWare Tools' -CurrentOperation 'Shutting down VM' -PercentComplete 85
+$null = Stop-VMGuest -VM $VM -Confirm:$false
+while ((Get-VM $VM).PowerState -eq 'PoweredOn')
+{
+    sleep -Milliseconds 500
+}
+
+Write-Progress -Activity 'Update VMWare Tools' -CurrentOperation 'Configuring PVS Device' -PercentComplete 90
+$PVSDevice.DeviceMac = $NIC.MacAddress.Replace(':','-')
+Set-PvsDevice -Device $PVSDevice
+Remove-NetworkAdapter -NetworkAdapter $TempNIC -Confirm:$False
+
+Write-Progress -Activity 'Update VMWare Tools' -CurrentOperation 'Starting VM' -PercentComplete 95
+$null = Start-VM -VM $VM
+while ((Get-View -VIObject $VM).Guest.ToolsRunningStatus -ne 'guestToolsRunning')
+{
+    sleep -Milliseconds 500
+}
+Write-Progress -Activity 'Update VMWare Tools' -CurrentOperation 'Ready' -Completed
