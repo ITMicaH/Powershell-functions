@@ -67,3 +67,6 @@ EXAMPLE:
 `PS\> Get-BrokerMachine -PowerState Unknown | Update-HostedMachineId -Controller srv-cdc-001 -Restart`
     
 Update Machine IDs using Delivery Controller srv-cdc-001 and restart the updated VMs.
+
+# Update-PVSDiskVMWareTools.ps1
+Creates a new PVS version, adds an e1000 nic to the VM and boots the PVS device from it. Then the VMWare Tools are updated and cleanup is performed.
