@@ -100,3 +100,40 @@ function Get-ISEMenuItem
         GetSubmenu $psISE.CurrentPowerShellTab.AddOnsMenu
     }
 }
+
+<#
+.Synopsis
+   Remove ISE Menu Item
+.DESCRIPTION
+   Remove ISE Menu Item
+.EXAMPLE
+   Remove-ISEMenuItem
+   Remove all custom menu items from ISE
+.EXAMPLE
+   Get-ISEMenuItem test* | Remove-ISEMenuItem
+   Remove items that start with Test from ISE
+#>
+function Remove-ISEMenuItem
+{
+    [CmdletBinding()]
+    Param
+    (
+        # Menu item to be removed
+        [Parameter(ValueFromPipeline)]
+        [Microsoft.PowerShell.Host.ISE.ISEMenuItem]
+        $MenuItem
+    )
+
+    Process
+    {
+        If ($PSBoundParameters['MenuItem'])
+        {
+            $Parent = Get-ISEMenuItem | where Submenus -Contains $MenuItem
+            $null = $Parent.Submenus.Remove($MenuItem)
+        }
+        else
+        {
+            $psISE.CurrentPowerShellTab.AddOnsMenu.Submenus.Clear()
+        }
+    }
+}
