@@ -7,6 +7,8 @@
    in the environment the PVS iso must also be present on the ISOPath location. ISO names cannot be altered.
 .EXAMPLE
    Upgrade-CitrixComponents -ISOPPath \\FileServer\Share\Citrix
+.EXAMPLE
+   Upgrade-CitrixComponents -ISOPPath \\FileServer\Share\Citrix -SkipDBUpgrade
 #>
 function Upgrade-CitrixComponents
 {
@@ -14,7 +16,11 @@ function Upgrade-CitrixComponents
     Param(
         #Path to the folder containing all Citrix iso's
         [System.IO.DirectoryInfo]
-        $ISOPath
+        $ISOPath,
+
+        #After upgrading the Delivery Controller skip the database upgrade
+        [switch]
+        $SkipDBUpgrade
     )
     
     Begin
@@ -51,6 +57,9 @@ function Upgrade-CitrixComponents
                 $CurrentVersion,
 
                 [switch]
+                $SkipDBUpgrade,
+
+                [switch]
                 $SkipVUS
             )
 
@@ -79,7 +88,7 @@ function Upgrade-CitrixComponents
                     if ($ArgumentsList -contains "/Components CONTROLLER")
                     {
                         $CurrentDBVersion = Get-BrokerInstalledDbVersion
-                        if ([version]$CurrentDBVersion.ToString(3) -lt [version]$NewVersion.ToString(3))
+                        if ([version]$CurrentDBVersion.ToString(3) -lt [version]$NewVersion.ToString(3) -and !$PSBoundParameters.SkipDBUpgrade)
                         {
                             If ($PSBoundParameters.SkipVUS)
                             {
@@ -331,7 +340,11 @@ function Upgrade-CitrixComponents
                 ArgumentsList = "/Components CONTROLLER","/quiet","/logpath $LogPath",'/noreboot'
                 CurrentVersion = $Package.Version
             }
-            if ($SkipVdaUpdateService)
+            if ($PSBoundParameters.SkipDBUpgrade)
+            {
+                $Params.Add('SkipDBUpgrade',$true)
+            }
+            elseif ($SkipVdaUpdateService)
             {
                 $Params.Add('SkipVUS',$true)
             }
