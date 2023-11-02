@@ -85,3 +85,11 @@ in the environment the PVS iso must also be present on the ISOPath location. ISO
 EXAMPLE:
 
 `PS\> Upgrade-CitrixComponents -ISOPPath \\FileServer\Share\Citrix`
+
+Update Citrix components using ISO from the share
+
+EXAMPLE:
+
+`PS\> Upgrade-CitrixComponents -ISOPPath \\FileServer\Share\Citrix` -SkipDBUpgrade
+
+Update Citrix components using ISO from the share and skip the database upgrade
