@@ -70,3 +70,18 @@ Update Machine IDs using Delivery Controller srv-cdc-001 and restart the updated
 
 # Update-PVSDiskVMWareTools.ps1
 Creates a new PVS version, adds an e1000 nic to the VM and boots the PVS device from it. Then the VMWare Tools are updated and cleanup is performed.
+
+# UpgradeCitrixBackend.ps1
+## Functions
+### Upgrade-CitrixComponents
+This function will detect which Citrix backend server application is installed and upgrade the components
+by mounting the appropriate ISO file and perform a silent update. If Provisioning Services is present
+in the environment the PVS iso must also be present on the ISOPath location. ISO names cannot be altered.
+
+## ChangeLog
+02-11-2023 : v1.0
+
+## Examples
+EXAMPLE:
+
+`PS\> Upgrade-CitrixComponents -ISOPPath \\FileServer\Share\Citrix`
