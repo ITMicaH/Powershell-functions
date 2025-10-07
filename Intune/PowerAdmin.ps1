@@ -6,7 +6,7 @@ function PowerAdmin
     Param(
         #Name of the local admin account
         [Parameter()]
-        [string()]
+        [string]
         $UserName = 'Administrator',
 
         #Command to run using 
