@@ -25,7 +25,7 @@ function PowerAdmin
         If ($CB -is [string])
         {
             Write-Verbose 'Trying clipboard'
-            $PW = Get-Clipboard | ConvertTo-SecureString -AsPlainText -Force
+            $PW = $CB | ConvertTo-SecureString -AsPlainText -Force
             $Credential = New-Object System.Management.Automation.PSCredential("$env:COMPUTERNAME\$UserName", $PW)
         }
     }
