@@ -7,7 +7,7 @@ function PowerAdmin
         #Name of the local admin account
         [Parameter()]
         [string]
-        $UserName = 'Administrator',
+        $UserName = 'TKLA',
 
         #Command to run using 
         [Parameter(ValueFromRemainingArguments)]
@@ -21,9 +21,13 @@ function PowerAdmin
     }
     else
     {
-        Write-Verbose 'Trying clipboard'
-        $PW = Get-Clipboard | ConvertTo-SecureString -AsPlainText -Force
-        $Credential = New-Object System.Management.Automation.PSCredential("$env:COMPUTERNAME\$UserName", $PW)
+        $CB = Get-Clipboard
+        If ($CB -is [string])
+        {
+            Write-Verbose 'Trying clipboard'
+            $PW = Get-Clipboard | ConvertTo-SecureString -AsPlainText -Force
+            $Credential = New-Object System.Management.Automation.PSCredential("$env:COMPUTERNAME\$UserName", $PW)
+        }
     }
     
     Write-Verbose "Handling command [$Command]"
