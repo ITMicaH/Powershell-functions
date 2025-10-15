@@ -35,15 +35,11 @@ function Write-Log
     }
 }
 
-Log 'Creating Runspace'
 $RunSpace = [RunspaceFactory]::CreateRunspacePool()
 $RunSpace.ApartmentState = "STA"
-Log 'Opening Runspace'
 $RunSpace.Open()
-Log 'Creating PowerShell environment with the runspace'
 $PowerShell = [powershell]::Create()
 $PowerShell.RunspacePool = $RunSpace
-Log 'Adding script to Powershell'
 [void]$PowerShell.AddScript({
 #region VDS
 
@@ -1043,7 +1039,10 @@ function Update-ErrorLog {
 
 
 ConvertFrom-WinFormsXML -Reference refs -Suppress -Xml @"
-<Form Name="MainForm" BackColor="Window" Font="Microsoft Sans Serif, 10pt" FormBorderStyle="FixedToolWindow" MaximizeBox="False" ShowIcon="False" Size="360,290" SizeGripStyle="Hide" StartPosition="CenterScreen" Tag="VisualStyle,DPIAware" Text="Remote Help Toolkit"><Button Name="bRegEdit" Location="180,95" Size="140,55" Text="Registry Editor" /><Button Name="bInstall" Location="20,20" Size="140,55" Text="Install software" /><Button Name="bCompMgt" Location="20,95" Size="140,55" Text="Computer Management" /><Button Name="bPrintFix" Location="180,170" Size="140,55" Text="PrintFix" /><Button Name="bRestartIntune" Location="20,170" Size="140,55" Text="Herstart Intune" /><Button Name="bAppWiz" Location="180,20" Size="140,55" Text="Uninstall Software" /></Form>
+<Form Name="MainForm" BackColor="Window" Font="Microsoft Sans Serif, 10pt" FormBorderStyle="FixedToolWindow" MaximizeBox="False" ShowIcon="False" Size="360,290" SizeGripStyle="Hide" StartPosition="CenterScreen" Tag="VisualStyle,DPIAware" Text="Remote Help Toolkit"><Button Name="bRegEdit" Location="180,95" Size="140,55" Text="Registry Editor" /><Button Name="bInstall" Enabled="False" Location="20,20" Size="140,55" Text="Install software" /><Button Name="bCompMgt" Location="20,95" Size="140,55" Text="Computer Management" /><Button Name="bPrintFix" Location="180,170" Size="140,55" Text="PrintFix" /><Button Name="bRestartIntune" Location="20,170" Size="140,55" Text="Herstart Intune Agent" /><Button Name="bAppWiz" Location="180,20" Size="140,55" Text="Uninstall Software" /></Form>
+"@
+ConvertFrom-WinFormsXML -Reference refs -Suppress -Xml @"
+<Timer Name="Timer3" Root="Timer|Timer3" Events="Tick" Enabled="True"/>
 "@
 #endregion VDS
 
@@ -1053,6 +1052,7 @@ $LogFile = 'C:\ProgramData\Microsoft\IntuneManagementExtension\Logs\RHT.log'
 If (Test-Path C:\ProgramData\Admin)
 {
     $bRestartIntune.Text = 'PowerShell'
+    $bInstall.Enabled = $true
 }
 #endregion prerequisites
 
@@ -1539,6 +1539,7 @@ function Start-PrintFix
     }
     Stop-Transcript
     $PrintfixForm.Dispose()
+    
     #endregion Main
 }
 
@@ -1661,14 +1662,20 @@ $bRestartIntune.add_Click({param($sender, $e)
 
 #endregion Button click
 
-#region start form
-Log 'Starting the form'
-[System.Windows.Forms.Application]::Run($MainForm) | Out-Null})
+$Timer3.add_Tick({param($sender, $e)
+    If (!(Test-Path C:\ProgramData\Admin))
+    {
+        If (!(Get-Process RemoteHelpRDP -Erroraction Ignore))
+        {
+        Log 'Remote Help terminated without closing the form or was never running. Closing form now.' -Type Warning
+            $MainForm.Dispose()
+        }
+    }
+})
 
+
+[System.Windows.Forms.Application]::Run($MainForm) | Out-Null})
 $PowerShell.AddParameter('File',$args[0]) | Out-Null
-Log 'Invoking Powershell form script'
 $PowerShell.Invoke() | Out-Null
-Log 'Disposing PowerShell environment'
 $PowerShell.Dispose() | Out-Null
 
-#endregion start form
