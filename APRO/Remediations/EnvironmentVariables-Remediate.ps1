@@ -1,8 +1,8 @@
 # UNC Paths to APRO shares
 $UncPaths = @{
-    APROPRD = "\\vsw-apl-021\apro$\Apro_Prod"
-    APROACC = "\\tst-vsw-apl-058\apro$\APRO-acceptatie"
-    APROTST = "\\tst-vsw-apl-058\apro$\APRO-test"
+    APROPRD = "\\<Apro_Prod path>"
+    APROACC = "\\<APRO-ACC path>"
+    APROTST = "\\<APRO-test path>"
 }
 
 # Set environment variable
