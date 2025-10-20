@@ -11,8 +11,10 @@ $ProxyUser = '' # Username for authenticated proxies
 $ProxyUserPW = '' # Password for authenticated proxies
 $Share = '' # Path to share (E.G. \\FileServer\AppxShare)
 $VerbosePreference = 'SilentlyContinue' #SilentlyContinue,Continue
+$UpdateShare = $True # False = download only
 
 #endregion
+
 
 #region functions
 
@@ -72,50 +74,77 @@ function Download-AppxPackageUpdate
             $text = $_.outerHTML.Substring(($_.outerHTML.IndexOf('>')+1),($_.outerHTML.LastIndexOf('<') - $_.outerHTML.IndexOf('>')-1))
             Add-Member -InputObject $_ -MemberType NoteProperty -Name innerText -Value $text
             $null = $text -match '^[^\d]+'
-            Add-Member -InputObject $_ -MemberType NoteProperty -Name Group -Value $Matches.Values.TrimEnd('.','_')
+            Add-Member -InputObject $_ -MemberType NoteProperty -Name Group -Value $text.Split('_')[0]
+            Add-Member -InputObject $_ -MemberType NoteProperty -Name Version -Value ([version]$text.Split('_')[1])
         }
         $GroupedLinks = $WebResponse.Links | Group Group
         $DownloadLinks = foreach ($Group in $GroupedLinks)
         {
             Write-Verbose "Processing package $($Group.Name)"
             $Links = $Group.Group.where{$_ -like '*_x64_*' -or $_ -like '*_neutral_*'}
-            $Appx = $Links.where{$_.innerText -match '\.appx'} | sort innerText | Select -Last 1
-            $BlockMap = $Links.where{$_.innerText -match '\.BlockMap'} | sort innerText | Select -Last 1
-            If ($Appx.innerText -match $Package.PackageName)
-            {
-                Write-Verbose "Skipping $($Group.Name)"
-            }
-            else
-            {
-                $Appx
-                $BlockMap
-            }
+            $Appx = $Links.where{$_.innerText -match '\.appx|\.msix'} | sort innerText
+            $Appx
         }
+        
         If ($DownloadLinks)
         {
-            $MainPackage = $DownloadLinks.Where{$_.innerText -like "$($Package.DisplayName)*.appx*"}
-            If (!$MainPackage)
+            $Params.Remove('ContentType')
+            $Params.Remove('UseBasicParsing')
+            $Params.Remove('Method')
+            $Params.Remove('Body')
+            $Params.Add('OutFile','')
+            If ($Package.DisplayName -notin $DownloadLinks.Group)
             {
                 Write-Verbose "Mainpackage is missing. Retrying."
                 Download-AppxPackageUpdate @PSBoundParameters
                 return
             }
-            elseif ($MainPackage.innerText -match $Package.PackageName)
+            $GroupedLinks = $DownloadLinks | Group Group
+            Write-Verbose "Downloading main package"
+            $null = New-Item "$Path\$($Package.DisplayName)" -ItemType Directory -ErrorAction SilentlyContinue
+            $MainGroup = $GroupedLinks.Where{$_.Name -eq $Package.DisplayName}
+            $Appx = $MainGroup.Group | where{$_.innerText -match '\.appx|\.msix'}
+            for ($i = -1; $i -ge -@($Appx).Count; $i--)
             {
-                Write-Verbose "Package $($Package.DisplayName) is already installed and up-to-date. Skipping download."
-                return
-            }
-            If (!(Test-Path "$Path\$($Package.DisplayName)"))
-            {
-                $null = New-Item -Path $Path -Name $Package.DisplayName -ItemType Directory
-            }
-            Write-Verbose "Downloading package and dependencies:"
-            foreach ($Link in $DownloadLinks)
-            {
+                $Link = $Appx[$i]
                 Write-Verbose "---$($Link.innerText)---"
+                if ([version]$Package.Version -ge $Link.Version)
+                {
+                    Write-Verbose "Package $($Package.DisplayName) is already installed and up-to-date. Skipping upgrade."
+                    return
+                }
                 $ProgressPreference = 0
-                Invoke-WebRequest -Uri $Link.href -OutFile "$Path\$($Package.DisplayName)\$($Link.innerText)" -ProxyUseDefaultCredentials -Proxy http://proxy02:8080
-                $ProgressPreference = 2
+                $Params.Uri = $Link.href
+		$Params.OutFile = "$Path\$($Package.DisplayName)\$($Link.innerText)"
+		Invoke-WebRequest @Params
+                $Dependencies = Get-AppxDependencies -Path $Params.OutFile
+                [version]$MinOSVersion = $Dependencies.TargetDeviceFamily | where Name -eq Windows.Desktop | Select -ExpandProperty MinVersion
+                if ($MinOSVersion -lt [System.Environment]::OSVersion.Version)
+                {
+                    Write-Verbose "Applicable version found: $($Link.innerText)"
+                    $AppxFile = Get-Item $Params.OutFile
+                    $i = -$Appx.Count - 1
+                }
+                else
+                {
+                    Remove-Item $Params.OutFile
+                }
+            }
+            If ($Dependencies.PackageDependency)
+            {
+                Write-Verbose "Downloading dependencies"
+                foreach ($Dependency in $Dependencies.PackageDependency)
+                {
+                    Write-Verbose "Downloading $($Dependency.Name)"
+                    $Appx = $GroupedLinks.where{$_.Name -eq $Dependency.Name}
+                    $Link = $Appx.group[-1]
+                    if ($Link.Version -ge [version]$Dependency.MinVersion)
+                    {
+                        $Params.Uri = $Link.href
+			$Params.OutFile = "$Path\$($Package.DisplayName)\$($Link.innerText)"
+			Invoke-WebRequest @Params
+                    }
+                }
             }
             Write-Verbose "Done with downloading $($Package.DisplayName)."
             Get-Item "$Path\$($Package.DisplayName)"
@@ -125,6 +154,41 @@ function Download-AppxPackageUpdate
             Write-Verbose "No download links available for $($Package.DisplayName)."
         }
     }
+}
+
+#Get Appx dependencies
+function Get-AppxDependencies
+{
+    Param(
+        [string]
+        $Path
+    )
+    Add-Type -assembly "system.io.compression.filesystem"
+    $Archive = [System.IO.Compression.ZipFile]::OpenRead($Path)
+    If ($Path -like '*bundle')
+    {
+        $Package = $Archive.Entries.where{$_.FullName -notlike '*/*' -and $_.Name -like '*x64*x'}
+        $Stream = $Package.Open()
+        $Appx = [System.IO.Compression.ZipArchive]::new($Stream)
+        $Manifest = $Appx.Entries | Where Name -eq AppxManifest.xml
+        $txtStream = $Manifest.Open()
+        $Reader = [System.IO.StreamReader]::new($txtStream)
+        [xml]$XML = $Reader.ReadToEnd()
+        $Dependencies = $XML.Package.Dependencies
+        $txtStream.Close()
+    }
+    else
+    {
+        $Manifest = $Archive.Entries | Where Name -eq AppxManifest.xml
+        $Stream = $Manifest.Open()
+        $Reader = [System.IO.StreamReader]::new($Stream)
+        [xml]$XML = $Reader.ReadToEnd()
+        $Dependencies = $XML.Package.Dependencies
+    }
+    $Reader.Close()
+    $Stream.Close()
+    $Archive.Dispose()
+    return $Dependencies
 }
 
 # Install update as provisioned package
@@ -140,7 +204,7 @@ function Update-AppxProvisionedPackage
     Process
     {
         $Files = Get-ChildItem $PackagePath.FullName
-        $MainPackage = $Files.Where{$_.Name -like "$($PackagePath.Name)*.appx*"}
+        $MainPackage = $Files.Where{$_.BaseName -like "$($PackagePath.Name)*" -and $_.Extension -like '*x*'}
         $Dependencies = $Files.Where{$_.Name -ne $MainPackage.Name -and $_.extension -like '.appx*'}
         Write-Verbose "Updating $($PackagePath.Name) using $MainPackage"
         $Params = @{
@@ -150,7 +214,14 @@ function Update-AppxProvisionedPackage
         {
             $Params.Add('DependencyPackagePath',$Dependencies.FullName)
         }
-        $null = Add-AppxProvisionedPackage @Params -Online -SkipLicense
+        try
+        {
+            $null = Add-AppxProvisionedPackage @Params -Online -SkipLicense -ErrorAction Stop
+        }
+        catch
+        {
+            Write-Warning "Package $($MainPackage.Basename) generated the following error: $_"
+        }
     }
 }
 
@@ -224,22 +295,37 @@ if ($Updates)
 {
     $Updates | Update-AppxProvisionedPackage
     $NewApps = Get-AppxProvisionedPackage -Online
-    foreach ($Appx in $CurrentApps)
+    $Output = foreach ($Appx in $CurrentApps)
     {
-        $NewApp = $NewApps | where DisplayName -eq $Appx.DisplayName
-        [pscustomobject]@{
-            AppxName = $Appx.DisplayName
-            OldVersion = $Appx.Version
-            NewVersion = $NewApp.Version
+        If ($NewApp = $NewApps | where DisplayName -eq $Appx.DisplayName)
+        {
+            [pscustomobject]@{
+                AppxName = $Appx.DisplayName
+                OldVersion = $Appx.Version
+                NewVersion = $NewApp.Version
+            }
+        }
+        else
+        {
+            Write-Error "Package $($Appx.DisplayName) failed to install"
+            [pscustomobject]@{
+                AppxName = $Appx.DisplayName
+                OldVersion = $Appx.Version
+                NewVersion = 'FAILED!! Please reïnstall package'
+            }
         }
     }
-    if ($Params.ProxyCredential)
+    $Output | ft -AutoSize
+    if ($UpdateShare)
     {
-        $Updates | Update-PackageShare -Path $Share -Credential $Params.ProxyCredential
-    }
-    else
-    {
-        $Updates | Update-PackageShare -Path $Share
+        if ($Params.ProxyCredential)
+        {
+            $Updates | Update-PackageShare -Path $Share -Credential $Params.ProxyCredential
+        }
+        else
+        {
+            $Updates | Update-PackageShare -Path $Share
+        }
     }
     $Updates | Remove-Item -Recurse
 }
