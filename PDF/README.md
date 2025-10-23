@@ -3,7 +3,7 @@
 #### Function Start-ExamFromPDF
 
 Extracts text from a test exam PDF file, parses the content and simulates the exam.
-Requires the [itextsharp.dll](http://github.com/itext/itextpdf/releases/latest).
+Requires the [itextsharp.dll](https://github.com/ITMicaH/Powershell-functions/blob/master/PDF/itextsharp.dll).
 Make sure the dll is unblocked after download (Properties - General Tab - Unblock).
 
 Usage examples:
@@ -16,5 +16,5 @@ Start a simulation of the SomeExam.pdf exam. The word SomeExam and the line 'Exc
 #### Function MergeAsPDF
 
 Start a GUI application where you can import (or drag&drop) Office, text and PDF files, change the order and merge them all in one PDF file.
-Requires the [itextsharp.dll](http://github.com/itext/itextpdf/releases/latest).
+Requires the [itextsharp.dll](https://github.com/ITMicaH/Powershell-functions/blob/master/PDF/itextsharp.dll).
 Make sure the dll is unblocked after download (Properties - General Tab - Unblock).
