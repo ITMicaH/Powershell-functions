@@ -11,3 +11,10 @@ Usage examples:
 Start-ExamFromPDF -PDFPath C:\PDF\SomeExam.pdf -DllPath C:\itextsharp.dll -PassingScore 850 -Exclude SomeExam,'Exclude this line' -DirectShow
 ```
 Start a simulation of the SomeExam.pdf exam. The word SomeExam and the line 'Exclude this line' are excluded from the content. The passing score is 850 (default 800). After answering a question the user is directly shown the correct answer.
+
+
+#### Function MergeAsPDF
+
+Start a GUI application where you can import (or drag&drop) Office, text and PDF files, change the order and merge them all in one PDF file.
+Requires the [itextsharp.dll](http://github.com/itext/itextpdf/releases/latest).
+Make sure the dll is unblocked after download (Properties - General Tab - Unblock).
