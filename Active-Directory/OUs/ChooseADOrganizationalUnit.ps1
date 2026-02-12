@@ -23,18 +23,19 @@
    Choose-ADOrganizationalUnit -RootOU OU=Finance,OU=Departments,DC=CONTOSO,DC=COM
    This command will show the form containing the OU structure of the
    CONTOSO.COM domain using the Finance OU as root.
+.EXAMPLE
+   Choose-ADOrganizationalUnit -ExpandOU OU=Management,OU=Finance,OU=Departments,DC=CONTOSO,DC=COM
+   This command will expand the Management OU of the finance department in the contoso domain
 .OUTPUTS
    PowerShell object with Name and Distinguished Name of chosen organizational unit.
 .NOTES
    Author : Michaja van der Zouwen
-   version: 2.3
-   Date   : 14-06-2018
+   version: 2.4
+   Date   : 12-02-2026
 
    New in this version: 
 
-   *  Change domain option in context menu disabled when only one domain is detected.
-   *  Fixed an issue with domains starting with a 'D'
-   *  Added a Change Farm button to the Change Domain GUI. 
+   *  Added the ExpandOU parameter
 
    Special thanks to @danSpotter for bringing these issues to light!
 .LINK
@@ -57,6 +58,10 @@ function Choose-ADOrganizationalUnit
                        Position=1)]
         [string]
         $RootOU,
+
+        #Expand treeview to this OU
+        [string]
+        $ExpandOU,
 	
 	    #Credentials for connecting to ActiveDirectory domain
 	    $Credential,
@@ -662,11 +667,8 @@ Password"
 				}
 				ElseIf ($Domain -match '\w+\.\w+')
 				{
-					If ($forest.Domains.Name -contains $Domain)
-					{
-						$DomainDN = "DC=$($Domain.ToUpper())" -replace '\.',',DC='
-					}
-					else
+					$DomainDN = "DC=$($Domain.ToUpper())" -replace '\.',',DC='
+					If (![adsi]::exists("LDAP://$DomainDN"))
 		            {
 		                throw "No domain found with FQDN '$Domain'."
 						$formChooseOU.Close()
@@ -876,6 +878,26 @@ Password"
 		try
 		{
 			Build-TreeView
+            If ($PSBoundParameters.ExpandOU)
+            {
+                if (!$PSBoundParameters.RootOU)
+                {
+                    $RootOU = $Treeview.TopNode.Firstnode.Name
+                }
+                elseif ($ExpandOU -notlike "*,$RootOU")
+                {
+                    $ExpandOU = "$ExpandOU,$RootOU"
+                }
+                $Node = $Treeview.Nodes.Find($RootOU,$true)
+                do
+                {
+                    $Node = $Node.Nodes.Where{$ExpandOU -match $_.Name}
+                    $Node.expand()
+                }
+                until($Node.Name -eq $ExpandOU)
+                $Treeview.Focus()
+                $Treeview.SelectedNode = $Node[0]
+            }
 		}
 		catch
 		{
@@ -1486,5 +1508,4 @@ A///AAIACw=='))
 	#Show the Form
 	$formChooseOU.ShowDialog() | Out-Null
     return $SelectedObject
-
-} #End Function Choose-ADOrganizationalUnit
+}
